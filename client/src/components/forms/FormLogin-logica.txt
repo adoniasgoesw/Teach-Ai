@@ -1,122 +1,105 @@
-FormLogin.jsx + Home.jsx — ideia, lógica e o que cada parte faz
-================================================================
+FormRegister.jsx + FormLogin.jsx + fluxo de navegação — lógica atual
+====================================================================
 
-IDEIA GERAL
+VISÃO GERAL
 -----------
-O formulário é “controlado”: o que o usuário digita fica em estado do React (email e
-userPassword). Ao enviar o formulário, o código compara esses valores com a lista
-`users` importada de `db.json`. Se achar um usuário com o mesmo e-mail e a mesma
-senha, considera login válido, limpa os campos e navega para `/home` passando esse
-usuário no **estado da rota** (React Router). A página Home lê esse estado e mostra
-nome e id. Se não achar par e-mail+senha, mostra mensagem de erro no login.
+- O frontend não usa mais `db.json` para autenticação.
+- Tanto registro quanto login conversam com a API real (`/api/auth/register` e `/api/auth/login`),
+  que valida e persiste os dados no Postgres.
+- Após sucesso (registro ou login), o app navega para `/home` passando o usuário autenticado
+  no `state` da rota (`navigate("/home", { state: { user } })`).
 
 
-FLUXO LOGIN → HOME (estado da navegação)
-----------------------------------------
-• No sucesso do login:
-      navigate("/home", { state: { user: match } })
+FormRegister.jsx — criação de conta + “login automático”
+--------------------------------------------------------
+- Estados principais:
+  - `name`, `email`, `userPassword`: controlam os inputs do formulário.
+  - `loading`: indica se há requisição em andamento (desabilita o botão e troca o texto).
+  - `error`: mensagem de erro vinda da API (email já existe, senha fraca, etc.).
 
-  O segundo argumento é um objeto de opções. `state` é um “saco de dados” que o
-  Router guarda junto com essa navegação. Aqui colocamos `user: match`, ou seja,
-  o mesmo objeto retornado pelo `find` (id, name, email, password, etc. como no JSON).
+- Submit (`handleSubmit`):
+  1. `e.preventDefault()` — impede o reload padrão do navegador.
+  2. Zera `error` e liga `loading`.
+  3. Chama a função de API `registerUser({ name, email, password: userPassword })`.
+     - Essa função faz `POST /api/auth/register` usando Axios.
+  4. A API, no sucesso, devolve:
+     ```json
+     {
+       "user": { "id": "...", "name": "...", "email": "...", "createdAt": "..." },
+       "message": "Usuário registrado e logado com sucesso."
+     }
+     ```
+     O componente extrai `const user = data.user || data`.
+  5. Limpa os campos do formulário.
+  6. Faz o “login automático”: `navigate("/home", { state: { user } })`, mandando o usuário
+     autenticado para a Home.
+  7. Em caso de erro (`catch`), lê `err.response?.data?.message` se existir (vinda do backend)
+     ou mostra uma mensagem genérica de falha. Essa mensagem vai para `error` e é renderizada
+     na interface.
 
-• Por que passar `match` inteiro?
-  Assim a Home não precisa adivinhar qual é o usuário (ex.: sempre `users[0]`) nem
-  buscar de novo no JSON pelo id: ela já recebe quem acabou de autenticar.
-
-• Limitação: esse `state` existe na pilha do histórico do browser. Se o usuário
-  atualizar a página (F5) em `/home`, o React Router pode não ter mais `state` e a
-  Home trata como “sem sessão” (ver abaixo). Para persistir após refresh, seria
-  preciso outra camada (ex.: localStorage ou API).
-
-
-ESTADOS NO FormLogin (useState)
--------------------------------
-• email / setEmail
-  String com o e-mail digitado. Começa vazia (""). Ligada ao input de e-mail via
-  value={email} e onChange que atualiza a cada tecla.
-
-• userPassword / setUserPassword
-  String com a senha digitada. Mesmo padrão do e-mail, no input type="password".
-
-• error / setError
-  String com a mensagem de erro, ou vazia quando não há erro.
-  Por que existe: o React precisa de estado para “lembrar” se deve mostrar ou não
-  o texto de falha e qual texto mostrar. Quando o login falha, setError preenche
-  a mensagem; quando o usuário tenta de novo, limpamos no início do submit para
-  não misturar erro antigo com tentativa nova.
-
-
-handleSubmit(e) — FormLogin
----------------------------
-• e.preventDefault()
-  Impede o comportamento padrão do navegador (recarregar a página ao submit).
-  Assim só roda a lógica em JavaScript/React.
-
-• setError("")
-  Limpa erro anterior assim que uma nova tentativa de login começa. Se não
-  limpasse, a mensagem antiga poderia continuar visível até o próximo erro.
-
-• const match = Data.users.find(...)
-  `find` percorre o array `Data.users` e devolve o PRIMEIRO elemento que satisfaz
-  a função, ou `undefined` se nenhum servir.
-
-  Condição em duas partes (com &&):
-  1) E-mail: compara com trim() e toLowerCase() nos dois lados para ignorar
-     espaços extras e diferença de maiúsculas/minúsculas no e-mail.
-  2) Senha: compara exatamente com `u.password` como está no JSON (sem alterar
-     maiúsculas; é o que está no db.json).
-
-  O resultado em `match`:
-  • Se encontrou usuário: `match` é o objeto do usuário (truthy), com `match.id`,
-    `match.name`, etc.
-  • Se não encontrou: `match` é `undefined` (falsy).
+- Validações de negócio (lado servidor, mas impactam o front):
+  - Verifica se `name`, `email` e `password` foram enviados.
+  - Verifica se o e-mail já existe na tabela `"User"`.
+  - Verifica se a senha atende aos critérios de força:
+    - Mínimo 8 caracteres.
+    - Pelo menos 1 letra minúscula, 1 maiúscula, 1 número e 1 símbolo.
+  - Em qualquer falha, o backend devolve `400` ou `409` com mensagem explicando o problema,
+    que o front mostra em `error`.
 
 
-if (match) { ... } else { ... } — FormLogin
--------------------------------------------
-• if (match)
-  Login válido: limpa os campos (setEmail/setUserPassword para ""), depois
-  navigate("/home", { state: { user: match } }) para abrir a Home já com o objeto
-  do usuário logado em `location.state.user`.
+FormLogin.jsx — login com API e navegação
+-----------------------------------------
+- Estados:
+  - `email`, `userPassword`: inputs controlados.
+  - `error`: mensagem de erro (por exemplo, “Email ou senha não conferem.”).
+  - `loading`: carrega enquanto a API de login está sendo chamada.
 
-• else
-  Login inválido: setError("Email ou senha não conferem.") para o usuário ver
-  o motivo na interface.
-
-
-Home.jsx — leitura do usuário logado
-------------------------------------
-• useLocation()
-  Hook do React Router que devolve o objeto `location` da rota atual. Entre outras
-  coisas, `location.state` é exatamente o `state` passado no `navigate(...)`.
-
-• const user = state?.user
-  Opcional encadeado (`?.`): se `state` for undefined (rota sem state), não quebra;
-  `user` fica undefined. Se existir state mas sem `user`, idem.
-
-• if (!user) return <Navigate to="/login" replace />
-  Se não há usuário no state (acesso direto a /home, refresh, link externo),
-  redireciona para a página de login. `replace` troca a entrada do histórico em
-  vez de empilhar, para o botão “voltar” não cair numa Home vazia de novo.
-
-• JSX com user.name e user.id
-  Só chega aqui quando `user` existe: saudação com o nome e exibição do id do
-  usuário que fez login (o mesmo registro validado contra o db.json).
+- Submit (`handleSubmit`):
+  1. `e.preventDefault()`.
+  2. Zera `error` e liga `loading`.
+  3. Chama `loginUser({ email, password: userPassword })`, que faz `POST /api/auth/login`.
+  4. Se a API retornar sucesso (`200`), espera um corpo do tipo:
+     ```json
+     {
+       "user": { "id": "...", "name": "...", "email": "..." },
+       "message": "Login realizado com sucesso."
+     }
+     ```
+     - O componente extrai `user` e limpa os campos.
+     - Em seguida, navega para `/home` com `navigate("/home", { state: { user } })`.
+  5. Se a API devolver `401` ou outro erro, o `catch` lê a mensagem em
+     `err.response?.data?.message` (por exemplo, “Email ou senha inválidos.”) ou usa
+     uma mensagem genérica. Essa string vai para `error` e aparece abaixo dos inputs.
+  6. `loading` volta para `false` no `finally`.
 
 
-NA INTERFACE DO LOGIN (JSX)
------------------------------
-{error ? <p role="alert">{error}</p> : null}
+Botões e feedback visual
+------------------------
+- No registro:
+  - Botão mostra `"Registering..."` quando `loading` é `true`, e `"Register"` caso contrário.
+  - O botão fica `disabled` enquanto `loading` é verdadeiro para evitar múltiplos submits.
 
-  Se `error` não for string vazia, renderiza um parágrafo com a mensagem.
-  `role="alert"` ajuda leitores de tela a anunciar o erro (acessibilidade).
-  Se `error` for "", não renderiza nada (null).
+- No login:
+  - Botão mostra `"Logging in..."` enquanto `loading` é `true`, e `"Login"` no estado normal.
+  - Também é desabilitado durante a chamada.
+
+- Mensagens de erro:
+  - São renderizadas somente se `error` não estiver vazia.
+  - No login, é exibida com estilo de texto em vermelho e `role="alert"` para acessibilidade.
 
 
-RESUMO EM UMA FRASE
--------------------
-No submit, comparamos e-mail+senha com `db.json`; `match` é o usuário encontrado;
-sucesso → limpa campos e navega para `/home` com `state: { user: match }`; a Home
-lê `state.user`, mostra nome e id, ou manda para `/login` se não houver usuário;
-falha no login → `error` na tela.
+Fluxo geral de navegação
+------------------------
+1. **Registro**:
+   - Usuário preenche nome, e-mail e senha forte.
+   - Frontend chama `/api/auth/register`.
+   - Backend cria o registro no banco (com id gerado e senha hasheada com bcrypt).
+   - Resposta inclui o `user`; o front faz “login automático” e redireciona para `/home`.
+
+2. **Login**:
+   - Usuário preenche e-mail e senha.
+   - Frontend chama `/api/auth/login`.
+   - Backend valida e-mail + senha (comparando com hash ou senha antiga, se for o caso).
+   - Se ok, devolve `user` e o front navega para `/home`.
+   - Se não, devolve `401` com mensagem, exibida no `FormLogin`.
+
