@@ -1,10 +1,12 @@
 import axios from "axios"
 
+// Vite carrega automaticamente .env.development e .env.production
+// e expõe apenas variáveis com prefixo VITE_.
 const API_BASE_URL =
   import.meta.env.VITE_API_URL ||
-  (import.meta.env.development
+  (import.meta.env.DEV
     ? "http://localhost:3000/api"
-    : "https://seu-dominio-de-producao/api")
+    : "https://teach-ai-86fo.onrender.com/api")
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
