@@ -1,0 +1,66 @@
+================================================================================
+  Home.jsx — lógica da área principal e relação com db.json
+================================================================================
+
+1. FONTE DE DADOS
+--------------------------------------------------------------------------------
+   O ficheiro client/src/data/db.json é importado em Home como `Data`.
+   Estrutura relevante:
+   - `users`   → lista de utilizadores (usada também no FormLogin para login).
+   - `course`  → lista de cursos (array). O nome da chave no JSON é `course`
+                 (singular), em linha com o que o código espera: Data.course.
+
+
+2. UTILIZADOR LOGADO
+--------------------------------------------------------------------------------
+   Após login bem-sucedido, o react-router envia o utilizador para /home com:
+   navigate("/home", { state: { user: match } })
+   Em Home:
+   - `useLocation()` lê `state.user`.
+   - Se não existir `user` (acesso direto a /home sem login), redireciona para
+     /login com <Navigate to="/login" replace />.
+
+
+3. DECISÃO: MOSTRAR "YOUR COURSES" OU BOAS-VINDAS
+--------------------------------------------------------------------------------
+   Variável: hasCourses
+   Cálculo:
+     hasCourses = Array.isArray(Data.course) && Data.course.length > 0
+
+   - Se `course` não for um array → tratado como "sem cursos" (hasCourses false).
+   - Se for array vazio [] → sem cursos → hasCourses false.
+   - Se tiver pelo menos um elemento → com cursos → hasCourses true.
+
+   Nota: a lógica só olha para o tamanho do array, não para o conteúdo de cada
+   objeto. Um array como [{}] (um objeto vazio) ainda tem length === 1, logo
+   hasCourses fica true. Para estado "sem cursos", use "course": [].
+
+   Na UI (main):
+   - hasCourses === true  → bloco com título "Your courses".
+   - hasCourses === false → bloco com "Welcome, {user.name}" e o texto a
+     sugerir adicionar o primeiro curso.
+
+
+4. LIMITAÇÃO IMPORTANTE (import estático do JSON)
+--------------------------------------------------------------------------------
+   Importar db.json no bundle significa que os valores são os que existiam
+   quando a aplicação foi construída / quando o dev server carregou o ficheiro.
+   Alterar cursos só no editor e gravar db.json atualiza em desenvolvimento
+   após o Vite recarregar; criar curso só na UI, sem gravar noutro sítio, não
+   muda automaticamente Data.course em tempo real. Para listas dinâmicas no
+   futuro, seria preciso estado global, API, localStorage, etc.
+
+
+5. OUTROS BOTÕES NA PÁGINA (contexto)
+--------------------------------------------------------------------------------
+   - "logout" → navigate('/') (landing).
+   - "Create a new course" → navigate('/course') (página de criação de curso).
+
+
+6. RESUMO EM UMA FRASE
+--------------------------------------------------------------------------------
+   Home mostra "Your courses" se Data.course tiver pelo menos um item; caso
+   contrário mostra a mensagem de boas-vindas para quem ainda não tem cursos,
+   desde que o utilizador esteja autenticado via state do router.
+
+================================================================================

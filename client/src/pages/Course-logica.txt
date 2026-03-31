@@ -1,0 +1,148 @@
+================================================================================
+  Course.jsx — lógica geral da página de curso
+================================================================================
+
+1. CONTEXTO E DADOS
+--------------------------------------------------------------------------------
+- A página `CoursePage` é aberta a partir de um card em Home.
+- O card envia o curso selecionado via `state` do `react-router`:
+  `navigate("/course", { state: { course } })`.
+- Em `Course.jsx`:
+  - `const course = state?.course` pega o curso atual.
+  - `sources` vem de `course.sources` (ou array vazio se não existir).
+  - `hasSources` é `true` se `sources.length > 0`.
+
+
+2. ESTADO PRINCIPAL
+--------------------------------------------------------------------------------
+- `openSourceId`: id da fonte (PDF) atualmente expandida no painel de Class.
+- `selectedLesson`: aula atualmente selecionada (usada em Content).
+- `flatLessons`: array “achatado” com TODAS as lessons de TODAS as fontes.
+- `selectedContent`: atalho para `selectedLesson.content` (texto da aula).
+
+Efeito inicial:
+- Um `useEffect` procura a primeira fonte que tenha lessons e:
+  - seta `selectedLesson` como a primeira lesson dessa fonte;
+  - seta `openSourceId` para abrir essa fonte no painel Class.
+
+Navegação entre aulas:
+- `handleNextLesson` usa `flatLessons` para achar o índice da aula atual e
+  avançar para a próxima (com loop no final).
+
+
+3. LAYOUT EM 3 PAINÉIS
+--------------------------------------------------------------------------------
+A estrutura principal da página monta três painéis lado a lado:
+
+- `ClassPanel`  (coluna esquerda)
+- `ContentPanel` (coluna central)
+- `StudioPanel`  (coluna direita)
+
+Passando props:
+- `ClassPanel`: recebe `sources`, `hasSources`, `openSourceId`,
+  `selectedLesson` e setters para abrir fonte e trocar aula.
+- `ContentPanel`: recebe `hasSources`, `course`, `selectedLesson`,
+  `selectedContent` e `onNextLesson` (para avançar a aula).
+- `StudioPanel`: hoje é apenas um painel visual dizendo “Studio” com um
+  botão “Content” (placeholder para futuras features).
+
+================================================================================
+  ClassPanel.jsx — fontes e aulas (lado esquerdo)
+================================================================================
+
+1. CABEÇALHO E AÇÃO
+--------------------------------------------------------------------------------
+- Mostra o título “Class”.
+- Tem um botão “Adicionar uma fonte” (ainda sem ação real; pensado para o
+  upload/criação de novas fontes no futuro).
+
+2. ESTADO VISUAL
+--------------------------------------------------------------------------------
+- Quando `hasSources` é `false`:
+  - Mostra o texto: “As fontes serão exibidas aqui”.
+- Quando `hasSources` é `true`:
+  - Lista todas as `sources` do curso num bloco com borda.
+  - Cada source tem:
+    - Um botão de cabeçalho com o título do PDF (`source.title`).
+    - Um ícone `ChevronRight` que gira 90° quando a fonte está aberta.
+
+3. ABRIR/COLAPSAR FONTE
+--------------------------------------------------------------------------------
+- `openSourceId` guarda qual fonte está aberta.
+- Ao clicar no cabeçalho da fonte, `setOpenSourceId`:
+  - Se já estava aberta → fecha (`null`).
+  - Se estava fechada → abre (`id` da fonte).
+
+4. LISTA DE AULAS (LESSONS)
+--------------------------------------------------------------------------------
+- Só aparece se a fonte estiver aberta e `source.lessons` for um array.
+- Para cada `lesson`:
+  - Mostra um botão com o `lesson.title`.
+  - Se `selectedLesson.id === lesson.id`, o botão recebe estilo de “ativo”
+    (fundo cinza claro) para indicar qual aula está sendo exibida no Content.
+  - Um clique em uma lesson chama `setSelectedLesson(lesson)`, o que faz:
+    - Atualizar `selectedContent` em `Course.jsx`.
+    - Atualizar o que é renderizado no painel Content.
+
+================================================================================
+  ContentPanel.jsx — exibição do conteúdo (lado central)
+================================================================================
+
+1. ESTADOS DE VAZIO E COM FONTE
+--------------------------------------------------------------------------------
+- Se `hasSources` é `false`:
+  - Mostra ícone de upload, texto “Adcione uma fonte para o seu curso” e
+    botão “Fazer o upload de um arquivo” (placeholder).
+- Se `hasSources` é `true`:
+  - Renderiza `CourseContent`, passando:
+    - `course` (curso atual).
+    - `selectedLesson` (aula atual).
+    - `selectedContent` (texto da aula).
+    - `onNextLesson` (função para avançar aula).
+
+
+================================================================================
+  CourseContent.jsx — lógica do player de aula
+================================================================================
+
+1. GUARD CLAUSE
+--------------------------------------------------------------------------------
+- Se não houver `selectedContent`:
+  - Mostra mensagem “Selecione uma aula para ver o conteúdo”.
+  - Nada mais é renderizado.
+
+2. ESTADO DE START
+--------------------------------------------------------------------------------
+- `started` (boolean):
+  - `false` no início → mostra overlay com botão de Play.
+  - `true` após clique → esconde o overlay e mostra o conteúdo da aula.
+
+3. BOTÃO PLAY (OVERLAY)
+--------------------------------------------------------------------------------
+- Um overlay `absolute inset-0` cobre o painel com fundo levemente escuro.
+- No centro há um card com botão `Play`:
+  - Clique em Play chama `setStarted(true)`.
+  - Depois disso, o overlay desaparece e o conteúdo fica “liberado”.
+
+4. CONTEÚDO DA AULA
+--------------------------------------------------------------------------------
+Quando `started` é `true`, são exibidos:
+
+- Header da aula:
+  - Título: `selectedLesson.title`.
+  - Botão de avançar (`ChevronRightIcon`), que chama `onNextLesson`.
+- Corpo da aula:
+  - Parágrafo com `selectedContent.body` (texto vindo do `db.json`).
+
+
+================================================================================
+  StudioPanel.jsx — painel de estúdio (lado direito)
+================================================================================
+
+- Atualmente é um painel estático com título “Studio” e um único botão
+  “Content”. Ele não controla estado nem troca de modo; serve como espaço
+  reservado para ferramentas futuras (resumos, IA, quiz, flashcards etc.),
+  mantendo já a estrutura visual de três colunas.
+
+================================================================================
+

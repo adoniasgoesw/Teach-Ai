@@ -1,0 +1,20 @@
+{
+    "users": [
+        {
+            "id": 1,
+            "name": "Usuário exemplo",
+            "email": "usuario@example.com",
+            "password": "altere-esta-senha",
+            "createdAt": "2021-01-01",
+            "updatedAt": "2021-01-01"
+        },
+        {
+            "id": 2,
+            "name": "Outro exemplo",
+            "email": "outro@example.com",
+            "password": "altere-esta-senha",
+            "createdAt": "2021-01-01",
+            "updatedAt": "2021-01-01"
+        }
+    ]
+}

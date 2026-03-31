@@ -1,0 +1,122 @@
+FormLogin.jsx + Home.jsx — ideia, lógica e o que cada parte faz
+================================================================
+
+IDEIA GERAL
+-----------
+O formulário é “controlado”: o que o usuário digita fica em estado do React (email e
+userPassword). Ao enviar o formulário, o código compara esses valores com a lista
+`users` importada de `db.json`. Se achar um usuário com o mesmo e-mail e a mesma
+senha, considera login válido, limpa os campos e navega para `/home` passando esse
+usuário no **estado da rota** (React Router). A página Home lê esse estado e mostra
+nome e id. Se não achar par e-mail+senha, mostra mensagem de erro no login.
+
+
+FLUXO LOGIN → HOME (estado da navegação)
+----------------------------------------
+• No sucesso do login:
+      navigate("/home", { state: { user: match } })
+
+  O segundo argumento é um objeto de opções. `state` é um “saco de dados” que o
+  Router guarda junto com essa navegação. Aqui colocamos `user: match`, ou seja,
+  o mesmo objeto retornado pelo `find` (id, name, email, password, etc. como no JSON).
+
+• Por que passar `match` inteiro?
+  Assim a Home não precisa adivinhar qual é o usuário (ex.: sempre `users[0]`) nem
+  buscar de novo no JSON pelo id: ela já recebe quem acabou de autenticar.
+
+• Limitação: esse `state` existe na pilha do histórico do browser. Se o usuário
+  atualizar a página (F5) em `/home`, o React Router pode não ter mais `state` e a
+  Home trata como “sem sessão” (ver abaixo). Para persistir após refresh, seria
+  preciso outra camada (ex.: localStorage ou API).
+
+
+ESTADOS NO FormLogin (useState)
+-------------------------------
+• email / setEmail
+  String com o e-mail digitado. Começa vazia (""). Ligada ao input de e-mail via
+  value={email} e onChange que atualiza a cada tecla.
+
+• userPassword / setUserPassword
+  String com a senha digitada. Mesmo padrão do e-mail, no input type="password".
+
+• error / setError
+  String com a mensagem de erro, ou vazia quando não há erro.
+  Por que existe: o React precisa de estado para “lembrar” se deve mostrar ou não
+  o texto de falha e qual texto mostrar. Quando o login falha, setError preenche
+  a mensagem; quando o usuário tenta de novo, limpamos no início do submit para
+  não misturar erro antigo com tentativa nova.
+
+
+handleSubmit(e) — FormLogin
+---------------------------
+• e.preventDefault()
+  Impede o comportamento padrão do navegador (recarregar a página ao submit).
+  Assim só roda a lógica em JavaScript/React.
+
+• setError("")
+  Limpa erro anterior assim que uma nova tentativa de login começa. Se não
+  limpasse, a mensagem antiga poderia continuar visível até o próximo erro.
+
+• const match = Data.users.find(...)
+  `find` percorre o array `Data.users` e devolve o PRIMEIRO elemento que satisfaz
+  a função, ou `undefined` se nenhum servir.
+
+  Condição em duas partes (com &&):
+  1) E-mail: compara com trim() e toLowerCase() nos dois lados para ignorar
+     espaços extras e diferença de maiúsculas/minúsculas no e-mail.
+  2) Senha: compara exatamente com `u.password` como está no JSON (sem alterar
+     maiúsculas; é o que está no db.json).
+
+  O resultado em `match`:
+  • Se encontrou usuário: `match` é o objeto do usuário (truthy), com `match.id`,
+    `match.name`, etc.
+  • Se não encontrou: `match` é `undefined` (falsy).
+
+
+if (match) { ... } else { ... } — FormLogin
+-------------------------------------------
+• if (match)
+  Login válido: limpa os campos (setEmail/setUserPassword para ""), depois
+  navigate("/home", { state: { user: match } }) para abrir a Home já com o objeto
+  do usuário logado em `location.state.user`.
+
+• else
+  Login inválido: setError("Email ou senha não conferem.") para o usuário ver
+  o motivo na interface.
+
+
+Home.jsx — leitura do usuário logado
+------------------------------------
+• useLocation()
+  Hook do React Router que devolve o objeto `location` da rota atual. Entre outras
+  coisas, `location.state` é exatamente o `state` passado no `navigate(...)`.
+
+• const user = state?.user
+  Opcional encadeado (`?.`): se `state` for undefined (rota sem state), não quebra;
+  `user` fica undefined. Se existir state mas sem `user`, idem.
+
+• if (!user) return <Navigate to="/login" replace />
+  Se não há usuário no state (acesso direto a /home, refresh, link externo),
+  redireciona para a página de login. `replace` troca a entrada do histórico em
+  vez de empilhar, para o botão “voltar” não cair numa Home vazia de novo.
+
+• JSX com user.name e user.id
+  Só chega aqui quando `user` existe: saudação com o nome e exibição do id do
+  usuário que fez login (o mesmo registro validado contra o db.json).
+
+
+NA INTERFACE DO LOGIN (JSX)
+-----------------------------
+{error ? <p role="alert">{error}</p> : null}
+
+  Se `error` não for string vazia, renderiza um parágrafo com a mensagem.
+  `role="alert"` ajuda leitores de tela a anunciar o erro (acessibilidade).
+  Se `error` for "", não renderiza nada (null).
+
+
+RESUMO EM UMA FRASE
+-------------------
+No submit, comparamos e-mail+senha com `db.json`; `match` é o usuário encontrado;
+sucesso → limpa campos e navega para `/home` com `state: { user: match }`; a Home
+lê `state.user`, mostra nome e id, ou manda para `/login` se não houver usuário;
+falha no login → `error` na tela.

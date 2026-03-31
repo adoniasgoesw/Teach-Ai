@@ -1,0 +1,45 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+
+# Vite / local overrides
+*.local
+
+# Environment & secrets (nunca commitar chaves, URLs privadas, tokens)
+.env
+.env.*
+!.env.example
+
+# Certificados e credenciais comuns
+*.pem
+*.p12
+*.key
+*credentials*
+secrets.json
+
+# Dados locais com senhas / PII (use db.example.json como modelo)
+src/data/db.json
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Ferramentas / deploy local
+.netlify
+.vercel
