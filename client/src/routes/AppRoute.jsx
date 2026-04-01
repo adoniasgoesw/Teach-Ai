@@ -11,7 +11,7 @@ export default function AppRoute() {
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/home" element={<HomePage />} />
-        <Route path="/course" element={<CoursePage />} />
+        <Route path="/course/:id" element={<CoursePage />} />
       </Routes>
     </BrowserRouter>
   )

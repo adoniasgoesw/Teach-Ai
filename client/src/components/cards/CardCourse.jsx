@@ -3,7 +3,7 @@ import { EllipsisVertical, Pencil, Trash } from "lucide-react"
 import { useState, useEffect, useRef } from "react"
 import { useNavigate } from "react-router-dom"
 
-export default function CardCourse({ name, description, icon, course }) {
+export default function CardCourse({ name, description, icon, course, onClick }) {
 
     const [showMenu, setShowMenu] = useState(false)
     const containerRef = useRef(null)
@@ -29,7 +29,17 @@ export default function CardCourse({ name, description, icon, course }) {
     return (
         <article
             className="bg-neutral-200 p-4 rounded-lg flex flex-col items-start justify-center gap-2 cursor-pointer"
-            onClick={() => navigate("/course", { state: { course } })}
+            onClick={
+                onClick
+                    ? onClick
+                    : () => {
+                        if (course?.id != null) {
+                            navigate(`/course/${course.id}`)
+                        } else {
+                            navigate("/course", { state: { course } })
+                        }
+                    }
+            }
         >
 
             <div ref={containerRef} className="relative flex w-full items-center justify-between">

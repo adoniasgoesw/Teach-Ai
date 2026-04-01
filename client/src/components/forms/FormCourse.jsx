@@ -2,21 +2,58 @@ import Button from "../buttons/Button"
 import { useNavigate } from "react-router-dom"
 import { useState } from "react"
 import { X } from "lucide-react"
+import { createCourse } from "../../services/api"
 
 export default function FormCourse({ onClose }) {
     const navigate = useNavigate()
 
     const [name, setName] = useState("")
     const [description, setDescription] = useState("")
+    const [loading, setLoading] = useState(false)
+    const [error, setError] = useState("")
 
-    function handleSubmit(e) {
+    async function handleSubmit(e) {
         e.preventDefault()
-        // aqui futuramente podemos salvar no db / API
-        navigate("/course")
+        setError("")
+        setLoading(true)
+
+        try {
+            const rawUser = window.localStorage.getItem("teachai:user")
+            const user = rawUser ? JSON.parse(rawUser) : null
+
+            if (!user?.id) {
+                setError("Usuário não encontrado. Faça login novamente.")
+                setLoading(false)
+                return
+            }
+
+            const data = await createCourse({
+                name,
+                description,
+                userId: user.id,
+            })
+
+            const course = data.course || data
+
+            console.log("Course created:", course)
+
+            setName("")
+            setDescription("")
+
+            onClose?.()
+            navigate(`/course/${course.id}`)
+        } catch (err) {
+            console.error(err)
+            const message =
+                err?.response?.data?.message || "Erro ao criar curso. Tente novamente."
+            setError(message)
+        } finally {
+            setLoading(false)
+        }
     }
 
     return (
-        <article className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 border-2 border-gray-200 w-full md:w-[60%] lg:w-1/3 flex flex-col items-start justify-center gap-5 p-4 rounded-lg bg-white shadow-lg">
+        <article className="absolute  top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 border-2 border-gray-200 w-full md:w-[60%] lg:w-1/3 flex flex-col items-start justify-center gap-5 p-4 rounded-lg bg-white shadow-lg">
             <div className="flex items-center justify-between w-full">
                 <h2 className="text-2xl font-normal">Create a new course</h2>
                 <Button
@@ -52,8 +89,20 @@ export default function FormCourse({ onClose }) {
                     />
                 </div>
 
+                {error && (
+                    <p className="text-red-500 text-sm w-full">
+                        {error}
+                    </p>
+                )}
+
                 <div className="flex flex-col items-center justify-center gap-2 w-full">
-                    <Button text="Create course" variant="secondary" size="md" type="submit" />
+                    <Button
+                        text={loading ? "Creating..." : "Create course"}
+                        variant="secondary"
+                        size="md"
+                        type="submit"
+                        disabled={loading}
+                    />
                 </div>
             </form>
         </article>

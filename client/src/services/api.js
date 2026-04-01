@@ -27,3 +27,15 @@ export async function loginUser(payload) {
   return res.data
 }
 
+export async function createCourse(payload) {
+  const res = await api.post("/courses", payload)
+  return res.data
+}
+
+export async function getCourses(userId) {
+  const res = await api.get("/courses", {
+    params: { userId },
+  })
+  return res.data
+}
+

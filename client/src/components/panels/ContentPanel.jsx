@@ -21,10 +21,13 @@ export default function ContentPanel({
                         <Button icon={<FileUp />} size="icon" variant="icon" />
                         <p>Adcione uma fonte para o seu curso</p>
                         <Button
-                            text={"Fazer o upload de um arquivo"}
-                            variant="outline" 
-                            size="sm"
-                        />
+                        text={"Fazer o upload de um arquivo"}
+                        variant="outline" 
+                        size="sm"
+                            
+                        >
+                            <Input:file type="file" />
+                        </Button>
                     </div>
                 )}
 

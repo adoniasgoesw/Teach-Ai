@@ -1,5 +1,5 @@
-import pool from "../config/db.js"
 import bcrypt from "bcrypt"
+import { prisma } from "../lib/prisma.js"
 
 function isValidPassword(password) {
   // mínimo 8 caracteres, com minúscula, maiúscula, número e símbolo
@@ -22,20 +22,40 @@ export async function register(req, res) {
       })
     }
 
-    const existing = await pool.query('SELECT id FROM "User" WHERE email = $1', [email])
+    const existing = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true },
+    })
 
-    if (existing.rowCount > 0) {
+    if (existing) {
       return res.status(409).json({ message: "Já existe um usuário com esse email." })
     }
 
     const hashedPassword = await bcrypt.hash(password, 10)
 
-    const result = await pool.query(
-      'INSERT INTO "User" (id, name, email, password, "createdAt", "updatedAt") VALUES (gen_random_uuid()::text, $1, $2, $3, NOW(), NOW()) RETURNING id, name, email, "createdAt"',
-      [name, email, hashedPassword]
-    )
+    // Busca o maior id numérico atual e soma +1. Se não existir, começa em 1.
+    const rows =
+      (await prisma.$queryRaw`SELECT COALESCE(MAX(CAST(id AS INTEGER)), 0) AS "max" FROM "User" WHERE id ~ '^[0-9]+$'`) ??
+      []
+    const currentMax = Number(rows[0]?.max ?? 0)
+    const nextId = String(currentMax + 1)
 
-    const user = result.rows[0]
+    const user = await prisma.user.create({
+      data: {
+        id: nextId,
+        name,
+        email,
+        password: hashedPassword,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        createdAt: true,
+      },
+    })
 
     // "login automático": devolvemos o usuário como logado
     return res.status(201).json({
@@ -56,16 +76,13 @@ export async function login(req, res) {
       return res.status(400).json({ message: "Email e senha são obrigatórios." })
     }
 
-    const result = await pool.query(
-      'SELECT id, name, email, password FROM "User" WHERE email = $1',
-      [email]
-    )
+    const userRow = await prisma.user.findUnique({
+      where: { email },
+    })
 
-    if (result.rowCount === 0) {
+    if (!userRow) {
       return res.status(401).json({ message: "Email ou senha inválidos." })
     }
-
-    const userRow = result.rows[0]
 
     // Suporte a senhas antigas em texto puro (antes de usar bcrypt)
     let passwordOk = false
