@@ -2,7 +2,7 @@ import { useEffect, useState } from "react"
 import { Link, useNavigate, useOutletContext } from "react-router-dom"
 import { Check, Rocket, Sparkles } from "lucide-react"
 import { useBillingData } from "../../hooks/useBillingData"
-import { getPlans } from "../../services/api"
+import { cancelStripeSubscription, getPlans } from "../../services/api"
 import { formatBrlFromCents, formatDatePt } from "../../lib/creditUi"
 import { buildPaymentLink } from "../../lib/stripePaymentLinks"
 
@@ -79,6 +79,7 @@ export default function OverviewPage() {
     const { user } = useOutletContext()
     const userId = user?.id != null ? String(user.id).trim() : ""
     const { summary, loading: summaryLoading, error } = useBillingData(userId)
+  const [cancelLoading, setCancelLoading] = useState(false)
 
     const [plans, setPlans] = useState([])
     const [plansLoading, setPlansLoading] = useState(true)
@@ -313,14 +314,37 @@ export default function OverviewPage() {
                                     </ul>
                                     <button
                                         type="button"
-                                        disabled={isCurrent || slug === "free"}
+                                        disabled={isCurrent || (slug === "free" && cancelLoading)}
                                         title={
                                             isCurrent || slug === "free"
                                                 ? undefined
                                                 : "Ir para pagamento"
                                         }
                                         onClick={() => {
-                                            if (isCurrent || slug === "free") return
+                                            if (isCurrent) return
+                                            if (slug === "free") {
+                                                if (!userId) return
+                                                const ok = window.confirm(
+                                                    "Voltar para o plano Free?\n\n- Seus créditos atuais serão mantidos.\n- A renovação mensal passará a conceder 20 créditos.\n- A assinatura paga será cancelada (se existir)."
+                                                )
+                                                if (!ok) return
+                                                setCancelLoading(true)
+                                                cancelStripeSubscription(userId)
+                                                    .then(() => {
+                                                        window.dispatchEvent(
+                                                            new Event("teachai:credits-updated")
+                                                        )
+                                                    })
+                                                    .catch((e) => {
+                                                        const msg =
+                                                            e?.response?.data?.message ||
+                                                            e?.message ||
+                                                            "Erro ao cancelar assinatura."
+                                                        window.alert(msg)
+                                                    })
+                                                    .finally(() => setCancelLoading(false))
+                                                return
+                                            }
                                             const url = buildPaymentLink(slug, {
                                                 email: user?.email,
                                             })
@@ -334,7 +358,7 @@ export default function OverviewPage() {
                                         }}
                                         className={
                                             isCurrent || slug === "free"
-                                                ? "mt-5 w-full rounded-xl border border-neutral-200 bg-neutral-100 text-neutral-500 text-sm font-medium py-2.5 cursor-not-allowed"
+                                                ? "mt-5 w-full rounded-xl border border-neutral-200 bg-neutral-100 text-neutral-600 text-sm font-medium py-2.5"
                                                 : slug === "pro"
                                                   ? "mt-5 w-full rounded-xl bg-violet-600 text-white text-sm font-semibold py-2.5 hover:bg-violet-700 transition-colors"
                                                   : slug === "plus"
@@ -347,7 +371,9 @@ export default function OverviewPage() {
                                         {isCurrent
                                             ? "Plano ativo"
                                             : slug === "free"
-                                              ? "Gratuito"
+                                              ? cancelLoading
+                                                ? "Voltando para Free…"
+                                                : "Voltar para Free"
                                               : `Assinar ${plan.name}`}
                                     </button>
                                 </article>

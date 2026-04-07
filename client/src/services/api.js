@@ -94,6 +94,21 @@ export async function createStripeSubscription(userId, planId) {
   }
 }
 
+/**
+ * Cancela assinatura Stripe e troca plano local para Free.
+ * Retorno: { ok: true, planSlug: "free" }
+ */
+export async function cancelStripeSubscription(userId) {
+  try {
+    const res = await api.post("/billing/cancel-subscription", {
+      userId: String(userId),
+    })
+    return res.data
+  } catch (err) {
+    await throwParsedClientError(err, "Cancelamento")
+  }
+}
+
 /** Perfil (nome, email) a partir do banco. */
 export async function getUserProfile(userId) {
   const res = await api.get("/users/profile", {

@@ -174,7 +174,8 @@ async function handleInvoicePaid(invoice) {
   const amountPaid = invoice.amount_paid ?? 0
   const grantPeriod =
     (billingReason === "subscription_create" ||
-      billingReason === "subscription_cycle") &&
+      billingReason === "subscription_cycle" ||
+      billingReason === "subscription_update") &&
     amountPaid > 0
 
   const card = await extractPmCardFromSub(sub, stripe)

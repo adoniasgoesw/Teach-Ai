@@ -29,7 +29,10 @@ import {
 } from "../controllers/creditController.js"
 import { listPlans } from "../controllers/planController.js"
 import { getUserProfile } from "../controllers/userController.js"
-import { postCreateSubscription } from "../controllers/billingController.js"
+import {
+  postCancelSubscription,
+  postCreateSubscription,
+} from "../controllers/billingController.js"
 
 const router = Router()
 
@@ -42,6 +45,7 @@ router.get("/credits/transactions", getCreditTransactions)
 router.get("/account/summary", getAccountSummary)
 router.get("/plans", listPlans)
 router.post("/billing/create-subscription", postCreateSubscription)
+router.post("/billing/cancel-subscription", postCancelSubscription)
 router.get("/users/profile", getUserProfile)
 router.post("/auth/register", register)
 router.post("/auth/login", login)
