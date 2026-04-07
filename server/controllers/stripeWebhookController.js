@@ -118,6 +118,18 @@ async function resolveUserIdFromStripeSubscription(sub, stripe) {
   })
   if (byCustomer) return byCustomer.id
 
+  // Fallback 1: se já registramos a subscription no banco, resolvemos por externalSubscriptionId.
+  // Isso evita depender de e-mail (ex.: usuário seed/teste com email diferente do Stripe checkout).
+  try {
+    const bySub = await prisma.userSubscription.findFirst({
+      where: { externalSubscriptionId: sub.id },
+      select: { userId: true },
+    })
+    if (bySub?.userId) return bySub.userId
+  } catch {
+    // ignore
+  }
+
   // Fallback: reconciliar por e-mail do customer
   try {
     const customer = await stripe.customers.retrieve(customerId)
@@ -584,6 +596,11 @@ export async function postStripeWebhook(req, res) {
         await handleCheckoutSessionCompleted(event.data.object)
         break
       case "invoice.paid":
+        await handleInvoicePaid(event.data.object)
+        break
+      case "invoice.payment_succeeded":
+        // Alguns setups enviam `invoice.payment_succeeded` (em vez de `invoice.paid`).
+        // Reusa a mesma lógica de conciliação/grant.
         await handleInvoicePaid(event.data.object)
         break
       case "invoice_payment.paid":
