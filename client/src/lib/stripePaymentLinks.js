@@ -17,11 +17,11 @@ export const STRIPE_PAYMENT_LINKS = {
         "https://buy.stripe.com/8x2dR95AG2u8cFD6XC2ZO01", // (provável PROD)
     ultra:
         import.meta.env.VITE_STRIPE_LINK_ULTRA ||
-        "https://buy.stripe.com/test_14AbJ12oud8M20Zeq42ZO00",
+        "https://buy.stripe.com/14AbJ12oud8M20Zeq42ZO00",
 }
 
-// Exemplo PROD (deixe configurado via env quando for virar live):
-// ultra: "https://buy.stripe.com/14AbJ12oud8M20Zeq42ZO00",
+// Exemplo TESTE (recomendado configurar via env quando for testar):
+// VITE_STRIPE_LINK_ULTRA=https://buy.stripe.com/test_14AbJ12oud8M20Zeq42ZO00
 
 export function paymentLinkForPlanSlug(slug) {
     const s = String(slug ?? "").trim().toLowerCase()

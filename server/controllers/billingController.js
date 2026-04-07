@@ -170,8 +170,8 @@ export async function postCreateSubscription(req, res) {
  * POST /api/billing/cancel-subscription
  * Body: { userId }
  *
- * Cancela a assinatura Stripe (se existir) e troca o plano local para Free.
- * Não reseta nem reduz o saldo atual — apenas muda o plano para a próxima renovação.
+ * Cancela a assinatura Stripe (se existir).
+ * IMPORTANTE: o banco é atualizado via webhook (customer.subscription.deleted).
  */
 export async function postCancelSubscription(req, res) {
   try {
@@ -187,66 +187,36 @@ export async function postCancelSubscription(req, res) {
     })
     if (!user) return res.status(404).json({ message: "Usuário não encontrado." })
 
-    const free = await prisma.plan.findUnique({ where: { slug: "free" } })
-    if (!free) {
-      return res.status(503).json({ message: "Plano free não encontrado no catálogo." })
-    }
-
     const subRow = await prisma.userSubscription.findUnique({
       where: { userId },
       include: { plan: { select: { slug: true } } },
     })
 
     if (!subRow) {
-      // Garante que usuário pelo menos tenha sub free criada.
-      const now = new Date()
-      await prisma.userSubscription.create({
-        data: {
-          userId,
-          planId: free.id,
-          status: "ACTIVE",
-          currentPeriodStart: now,
-          currentPeriodEnd: addOneCalendarMonth(now),
-          creditsIncludedThisPeriod: free.monthlyCredits,
-        },
+      // Nada para cancelar (ainda não existe assinatura local).
+      return res.status(200).json({ ok: true, canceled: false })
+    }
+
+    if (!subRow.externalSubscriptionId) {
+      // Plano free/local sem assinatura Stripe.
+      return res.status(200).json({ ok: true, canceled: false })
+    }
+
+    const stripe = getStripe()
+    try {
+      await stripe.subscriptions.cancel(subRow.externalSubscriptionId)
+    } catch (e) {
+      console.warn(
+        "[billing] cancel-subscription: stripe cancel failed",
+        e?.message || e
+      )
+      return res.status(502).json({
+        message: "Não foi possível cancelar na Stripe. Tente novamente.",
       })
-      return res.status(200).json({ ok: true, planSlug: "free" })
     }
 
-    if (subRow.plan?.slug === "free" && !subRow.externalSubscriptionId) {
-      return res.status(200).json({ ok: true, planSlug: "free" })
-    }
-
-    if (subRow.externalSubscriptionId) {
-      const stripe = getStripe()
-      try {
-        await stripe.subscriptions.cancel(subRow.externalSubscriptionId)
-      } catch (e) {
-        console.warn("[billing] cancel-subscription: stripe cancel failed", e?.message || e)
-      }
-    }
-
-    const now = new Date()
-    await prisma.userSubscription.update({
-      where: { userId },
-      data: {
-        planId: free.id,
-        status: "ACTIVE",
-        externalSubscriptionId: null,
-        externalCustomerId: null,
-        creditsIncludedThisPeriod: free.monthlyCredits,
-        currentPeriodStart: now,
-        currentPeriodEnd: addOneCalendarMonth(now),
-        cardLast4: null,
-        cardBrand: null,
-        cardExpMonth: null,
-        cardExpYear: null,
-        lastPaymentAmountCents: null,
-        lastPaymentAt: null,
-      },
-    })
-
-    return res.status(200).json({ ok: true, planSlug: "free" })
+    // Banco será atualizado pelo webhook customer.subscription.deleted.
+    return res.status(202).json({ ok: true, canceled: true })
   } catch (err) {
     console.error("[billing] cancel-subscription:", err)
     return res.status(500).json({ message: "Erro ao cancelar assinatura." })

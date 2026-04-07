@@ -112,6 +112,7 @@ export default function OverviewPage() {
     }, [])
 
     const currentSlug = summary?.subscription?.plan?.slug ?? null
+    const canCancel = Boolean(summary?.subscription?.externalSubscriptionId)
     const planLabel =
         summary?.subscription?.plan?.name ?? "Sem assinatura ativa"
     const remaining = summary?.usage?.remaining ?? 0
@@ -220,12 +221,48 @@ export default function OverviewPage() {
                                     </span>
                                 </p>
                             </div>
-                            <Link
-                                to="/configuracao/billing"
-                                className="inline-flex justify-center rounded-xl bg-neutral-900 text-white text-sm font-medium px-5 py-2.5 hover:bg-neutral-800 transition-colors"
-                            >
-                                Ver cobrança
-                            </Link>
+                            <div className="flex flex-col sm:flex-row gap-2">
+                                {canCancel && (
+                                    <button
+                                        type="button"
+                                        disabled={cancelLoading}
+                                        onClick={() => {
+                                            const ok = window.confirm(
+                                                "Cancelar assinatura?\n\n- A cobrança na Stripe será cancelada.\n- Seu plano será atualizado para Free pelo webhook (pode levar alguns segundos).\n- Seus créditos atuais serão mantidos."
+                                            )
+                                            if (!ok) return
+                                            setCancelLoading(true)
+                                            cancelStripeSubscription(userId)
+                                                .then(() => {
+                                                    window.alert(
+                                                        "Cancelamento solicitado. Aguarde alguns segundos e atualize a página."
+                                                    )
+                                                })
+                                                .catch((e) => {
+                                                    const msg =
+                                                        e?.response?.data?.message ||
+                                                        e?.message ||
+                                                        "Erro ao cancelar assinatura."
+                                                    window.alert(msg)
+                                                })
+                                                .finally(() =>
+                                                    setCancelLoading(false)
+                                                )
+                                        }}
+                                        className="inline-flex justify-center rounded-xl border border-red-200 bg-white text-red-700 text-sm font-semibold px-5 py-2.5 hover:bg-red-50 disabled:opacity-50"
+                                    >
+                                        {cancelLoading
+                                            ? "Cancelando…"
+                                            : "Cancelar assinatura"}
+                                    </button>
+                                )}
+                                <Link
+                                    to="/configuracao/billing"
+                                    className="inline-flex justify-center rounded-xl bg-neutral-900 text-white text-sm font-medium px-5 py-2.5 hover:bg-neutral-800 transition-colors"
+                                >
+                                    Ver cobrança
+                                </Link>
+                            </div>
                         </div>
                     )}
                 </section>
@@ -331,8 +368,8 @@ export default function OverviewPage() {
                                                 setCancelLoading(true)
                                                 cancelStripeSubscription(userId)
                                                     .then(() => {
-                                                        window.dispatchEvent(
-                                                            new Event("teachai:credits-updated")
+                                                        window.alert(
+                                                            "Cancelamento solicitado. Aguarde alguns segundos e atualize a página."
                                                         )
                                                     })
                                                     .catch((e) => {

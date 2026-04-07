@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { useOutletContext } from "react-router-dom"
 import { useBillingData } from "../../hooks/useBillingData"
-import { getBillingInvoices } from "../../services/api"
+import { cancelStripeSubscription, getBillingInvoices } from "../../services/api"
 import { formatBrlFromCents, formatDatePt } from "../../lib/creditUi"
 
 const STATUS_LABEL = {
@@ -31,6 +31,8 @@ export default function BillingPage() {
     const sub = summary?.subscription
     const plan = sub?.plan
     const priceCents = plan?.priceMonthlyCents ?? 0
+    const canCancel = Boolean(sub?.externalSubscriptionId)
+    const [cancelLoading, setCancelLoading] = useState(false)
 
     useEffect(() => {
         let cancelled = false
@@ -146,6 +148,37 @@ export default function BillingPage() {
                     >
                         Adicionar pagamento (em breve)
                     </button>
+
+                    {canCancel && (
+                        <button
+                            type="button"
+                            disabled={cancelLoading}
+                            onClick={() => {
+                                const ok = window.confirm(
+                                    "Cancelar assinatura?\n\n- A cobrança na Stripe será cancelada.\n- Seu plano será atualizado para Free pelo webhook (pode levar alguns segundos).\n- Seus créditos atuais serão mantidos."
+                                )
+                                if (!ok) return
+                                setCancelLoading(true)
+                                cancelStripeSubscription(userId)
+                                    .then(() => {
+                                        window.alert(
+                                            "Cancelamento solicitado. Aguarde alguns segundos e atualize a página."
+                                        )
+                                    })
+                                    .catch((e) => {
+                                        const msg =
+                                            e?.response?.data?.message ||
+                                            e?.message ||
+                                            "Erro ao cancelar assinatura."
+                                        window.alert(msg)
+                                    })
+                                    .finally(() => setCancelLoading(false))
+                            }}
+                            className="rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
+                        >
+                            {cancelLoading ? "Cancelando…" : "Cancelar assinatura"}
+                        </button>
+                    )}
                 </section>
             )}
 
