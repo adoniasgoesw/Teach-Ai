@@ -1,0 +1,12 @@
+# Render Web Service — API Node (Express + Prisma)
+# Ajuste o nome do serviço no painel se já existir outro.
+services:
+  - type: web
+    name: teach-ai-api
+    runtime: node
+    rootDir: server
+    buildCommand: npm install
+    startCommand: node index.js
+    envVars:
+      - key: NODE_VERSION
+        value: "22"

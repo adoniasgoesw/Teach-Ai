@@ -5,7 +5,7 @@ import {
   createUserContent,
 } from "@google/genai"
 import { PDFParse } from "pdf-parse"
-import { ai } from "../lib/gemini.js"
+import { getGeminiClient } from "../lib/gemini.js"
 import { renderPdfPagesToPngBuffers } from "../lib/pdfPageImages.js"
 import { prisma } from "../lib/prisma.js"
 import { assertCourseOwnedByUser } from "../lib/courseAccess.js"
@@ -432,7 +432,7 @@ export async function processPdf(req, res) {
             "página(s)…"
           )
           const responseUnified = await callGeminiWithRetry(() =>
-            ai.models.generateContent({
+            getGeminiClient().models.generateContent({
               model: PDF_GEMINI_MODEL,
               contents: createUserContent(parts),
             })
@@ -468,7 +468,7 @@ export async function processPdf(req, res) {
         const unifiedPrompt = buildUnifiedPrompt(excerpt)
         console.log("[PDF][IA] Enviando para Gemini (texto)…")
         const responseUnified = await callGeminiWithRetry(() =>
-          ai.models.generateContent({
+          getGeminiClient().models.generateContent({
             model: PDF_GEMINI_MODEL,
             contents: unifiedPrompt,
           })
