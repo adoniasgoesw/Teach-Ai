@@ -193,7 +193,9 @@ export async function postSourceAudio(req, res) {
     const hint =
       code === 7 || code === 16
         ? " Verifique credenciais Google TTS e API ativa."
-        : ""
+        : code === 13
+          ? " Erro interno do Google TTS: use voz Neural2/Wavenet (veja GOOGLE_TTS_VOICE_NAME no servidor)."
+          : ""
     if (code === "P2028") {
       return res.status(503).json({
         message:

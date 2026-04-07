@@ -109,7 +109,9 @@ export async function postGoogleTts(req, res) {
     const hint =
       code === 7 || code === 16
         ? " Verifique GOOGLE_APPLICATION_CREDENTIALS ou GOOGLE_TTS_CREDENTIALS_JSON e se a API Text-to-Speech está ativa no projeto."
-        : ""
+        : code === 13
+          ? " Erro interno do Google TTS (voz ou SSML). Tente GOOGLE_TTS_VOICE_NAME=pt-BR-Neural2-A ou remova vozes Chirp3."
+          : ""
     return res.status(500).json({
       message: `Erro ao gerar áudio (Google Cloud TTS).${hint}`,
       detail: String(err?.message || err).slice(0, 500),
