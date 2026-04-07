@@ -10,27 +10,6 @@ export const api = axios.create({
   baseURL: API_BASE_URL,
 })
 
-/** Servidor opcional `server.js` (porta 3002): só parse/ping. */
-const TEST_API_BASE_URL =
-  import.meta.env.VITE_TEST_API_URL || "http://localhost:3002/api/teste"
-
-export const testApi = axios.create({
-  baseURL: TEST_API_BASE_URL,
-  timeout: 900_000,
-})
-
-export async function testePing() {
-  const res = await testApi.get("/ping")
-  return res.data
-}
-
-export async function testeParsePdf(file) {
-  const formData = new FormData()
-  formData.append("file", file)
-  const res = await testApi.post("/parse-pdf", formData)
-  return res.data
-}
-
 /**
  * PDF → Gemini → Prisma (API principal `index.js`, POST /ai/pdf).
  * Exige courseId existente; só grava no BD se a IA responder JSON válido.
