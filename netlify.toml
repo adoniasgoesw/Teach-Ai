@@ -1,0 +1,6 @@
+[build]
+  base = "client"
+  command = "npm run build"
+  publish = "dist"
+
+# Stripe Elements disabled on frontend (Payment Links only).

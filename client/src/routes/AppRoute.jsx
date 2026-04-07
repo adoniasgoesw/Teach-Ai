@@ -9,7 +9,6 @@ import OverviewPage from '../pages/setting/OverviewPage'
 import ProfilePage from '../pages/setting/ProfilePage'
 import UsagePage from '../pages/setting/UsagePage'
 import BillingPage from '../pages/setting/BillingPage'
-import CheckoutPage from '../pages/setting/CheckoutPage'
 
 export default function AppRoute() {
   return (
@@ -26,7 +25,6 @@ export default function AppRoute() {
           <Route path="profile" element={<ProfilePage />} />
           <Route path="usage" element={<UsagePage />} />
           <Route path="billing" element={<BillingPage />} />
-          <Route path="checkout" element={<CheckoutPage />} />
           <Route path="invoices" element={<Navigate to="/configuracao/billing" replace />} />
         </Route>
       </Routes>
