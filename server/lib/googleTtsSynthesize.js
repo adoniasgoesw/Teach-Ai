@@ -2,6 +2,7 @@
  * Síntese Google Cloud TTS → Buffer MP3 (texto longo em fatias).
  * Usado por POST /tts/google e pelo cache em SourceAudio.
  */
+import fs from "node:fs"
 import { TextToSpeechClient } from "@google-cloud/text-to-speech"
 
 const DEFAULT_CHUNK_UTF8 = 4500
@@ -87,20 +88,60 @@ function splitTextIntoUtf8Chunks(str, maxBytes) {
 
 let clientSingleton = null
 
+function assertServiceAccountShape(creds) {
+  if (!creds || typeof creds !== "object") return
+  if (!creds.client_email || !creds.private_key) {
+    throw new Error(
+      "Credenciais Google TTS: o JSON precisa ser de uma service account (client_email + private_key)."
+    )
+  }
+}
+
+/**
+ * Em Render/Fly/Heroku não existe ADC; é obrigatório JSON ou arquivo acessível.
+ * Preferir GOOGLE_TTS_CREDENTIALS_JSON (minificado) ou GOOGLE_TTS_CREDENTIALS_JSON_B64 no painel.
+ */
 export function getTtsClient() {
   if (clientSingleton) return clientSingleton
   const opts = {}
+  const jsonB64 = process.env.GOOGLE_TTS_CREDENTIALS_JSON_B64?.trim()
   const json = process.env.GOOGLE_TTS_CREDENTIALS_JSON?.trim()
   const keyFile = process.env.GOOGLE_APPLICATION_CREDENTIALS?.trim()
-  if (json) {
+
+  if (jsonB64) {
+    let decoded
+    try {
+      decoded = Buffer.from(jsonB64, "base64").toString("utf8")
+      opts.credentials = JSON.parse(decoded)
+    } catch {
+      throw new Error(
+        "GOOGLE_TTS_CREDENTIALS_JSON_B64 inválido (use base64 do JSON da service account)."
+      )
+    }
+    assertServiceAccountShape(opts.credentials)
+  } else if (json) {
     try {
       opts.credentials = JSON.parse(json)
     } catch {
       throw new Error("GOOGLE_TTS_CREDENTIALS_JSON não é JSON válido.")
     }
+    assertServiceAccountShape(opts.credentials)
   } else if (keyFile) {
+    if (!fs.existsSync(keyFile)) {
+      throw new Error(
+        `GOOGLE_APPLICATION_CREDENTIALS: arquivo não encontrado (${keyFile}). ` +
+          "No Render, defina GOOGLE_TTS_CREDENTIALS_JSON ou GOOGLE_TTS_CREDENTIALS_JSON_B64 com o JSON da service account (arquivo local não existe no deploy)."
+      )
+    }
     opts.keyFilename = keyFile
+  } else {
+    throw new Error(
+      "Google Cloud TTS sem credenciais: defina GOOGLE_TTS_CREDENTIALS_JSON, " +
+        "GOOGLE_TTS_CREDENTIALS_JSON_B64 ou GOOGLE_APPLICATION_CREDENTIALS. " +
+        "No GCP, ative a API Cloud Text-to-Speech e use uma chave JSON de service account."
+    )
   }
+
   clientSingleton = new TextToSpeechClient(opts)
   return clientSingleton
 }

@@ -55,12 +55,26 @@ export default function FormLogin({ onCick }) {
 
                 <div className="flex flex-col items-start justify-center gap-2 w-full">
                 <label >Email</label>
-                <input type="text" placeholder="Tell me your email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full"/>
+                <input
+                    type="email"
+                    autoComplete="email"
+                    placeholder="Tell me your email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full"
+                />
                 </div>
 
                 <div className="flex flex-col items-start justify-center gap-2 w-full">
                     <label>Password</label>
-                <input type="password" placeholder="password" value={userPassword}  onChange={(e) => setUserPassword(e.target.value)} className="w-full"/>
+                <input
+                    type="password"
+                    autoComplete="current-password"
+                    placeholder="password"
+                    value={userPassword}
+                    onChange={(e) => setUserPassword(e.target.value)}
+                    className="w-full"
+                />
                 </div>
 
                 {error ? <p role="alert" className="text-red-500 text-sm">{error}</p> : null}
