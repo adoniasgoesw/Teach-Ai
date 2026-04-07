@@ -252,3 +252,53 @@ export async function postCancelSubscription(req, res) {
     return res.status(500).json({ message: "Erro ao cancelar assinatura." })
   }
 }
+
+/**
+ * GET /api/billing/invoices?userId=&take=
+ * Lista faturas registradas no banco (Stripe + local).
+ */
+export async function getBillingInvoices(req, res) {
+  try {
+    const userId =
+      req.query?.userId != null ? String(req.query.userId).trim() : ""
+    if (!userId) {
+      return res.status(400).json({ message: "userId é obrigatório." })
+    }
+
+    const takeRaw = Number(req.query?.take)
+    const take = Number.isFinite(takeRaw)
+      ? Math.min(200, Math.max(1, Math.floor(takeRaw)))
+      : 50
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    })
+    if (!user) {
+      return res.status(404).json({ message: "Usuário não encontrado." })
+    }
+
+    const invoices = await prisma.invoice.findMany({
+      where: { userId },
+      orderBy: [{ createdAt: "desc" }],
+      take,
+      select: {
+        id: true,
+        amountCents: true,
+        currency: true,
+        status: true,
+        description: true,
+        paidAt: true,
+        dueAt: true,
+        externalId: true,
+        hostedInvoiceUrl: true,
+        createdAt: true,
+      },
+    })
+
+    return res.status(200).json({ invoices })
+  } catch (err) {
+    console.error("[billing] invoices:", err)
+    return res.status(500).json({ message: "Erro ao listar faturas." })
+  }
+}
