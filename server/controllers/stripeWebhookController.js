@@ -1,4 +1,5 @@
 import { prisma } from "../lib/prisma.js"
+import { parsePositiveInt } from "../lib/parseId.js"
 import { getStripe } from "../lib/stripeServer.js"
 import {
   planSlugFromStripePriceId,
@@ -27,6 +28,25 @@ function prismaSubStatus(stripeStatus) {
   }
 }
 
+function stripeUnixSecondsToDateOrNull(v) {
+  const n = Number(v)
+  if (!Number.isFinite(n) || n <= 0) return null
+  const d = new Date(n * 1000)
+  return Number.isFinite(d.getTime()) ? d : null
+}
+
+function resolveSubscriptionPeriodOrFallback(sub) {
+  const start = stripeUnixSecondsToDateOrNull(sub?.current_period_start)
+  const end = stripeUnixSecondsToDateOrNull(sub?.current_period_end)
+  if (start && end) return { periodStart: start, periodEnd: end, usedFallback: false }
+  const now = new Date()
+  return {
+    periodStart: now,
+    periodEnd: addOneCalendarMonth(now),
+    usedFallback: true,
+  }
+}
+
 async function extractPmCardFromSub(subscription, stripe) {
   let pm = subscription.default_payment_method
   if (typeof pm === "string") {
@@ -48,11 +68,15 @@ async function extractPmCardFromSub(subscription, stripe) {
 }
 
 async function resolvePlanFromStripeSubscription(sub) {
-  if (sub.metadata?.appPlanId) {
-    const p = await prisma.plan.findUnique({
-      where: { id: sub.metadata.appPlanId },
-    })
-    if (p) return p
+  const metaPlan = sub.metadata?.appPlanId
+  if (metaPlan != null && String(metaPlan).trim() !== "") {
+    const pid = parsePositiveInt(metaPlan)
+    if (pid != null) {
+      const p = await prisma.plan.findUnique({
+        where: { id: pid },
+      })
+      if (p) return p
+    }
   }
   const item0 = sub.items?.data?.[0]
   const priceId = item0?.price?.id
@@ -76,9 +100,12 @@ async function resolvePlanFromStripeSubscription(sub) {
 
 async function resolveUserIdFromStripeSubscription(sub, stripe) {
   const metaUserId = sub.metadata?.appUserId
-  if (metaUserId) {
-    const u = await prisma.user.findUnique({ where: { id: String(metaUserId) } })
-    if (u) return String(u.id)
+  if (metaUserId != null && String(metaUserId).trim() !== "") {
+    const uid = parsePositiveInt(metaUserId)
+    if (uid != null) {
+      const u = await prisma.user.findUnique({ where: { id: uid } })
+      if (u) return u.id
+    }
   }
 
   const customerId =
@@ -89,7 +116,7 @@ async function resolveUserIdFromStripeSubscription(sub, stripe) {
     where: { stripeCustomerId: customerId },
     select: { id: true, stripeCustomerId: true, email: true },
   })
-  if (byCustomer) return String(byCustomer.id)
+  if (byCustomer) return byCustomer.id
 
   // Fallback: reconciliar por e-mail do customer
   try {
@@ -108,7 +135,7 @@ async function resolveUserIdFromStripeSubscription(sub, stripe) {
         data: { stripeCustomerId: customerId },
       })
     }
-    return String(byEmail.id)
+    return byEmail.id
   } catch {
     return null
   }
@@ -132,7 +159,7 @@ async function handleInvoicePaid(invoice) {
     expand: ["default_payment_method"],
   })
   const userId = await resolveUserIdFromStripeSubscription(sub, stripe)
-  if (!userId) {
+  if (userId == null) {
     console.warn("[stripe] invoice.paid: não foi possível identificar user", subId)
     return
   }
@@ -153,6 +180,16 @@ async function handleInvoicePaid(invoice) {
   const card = await extractPmCardFromSub(sub, stripe)
   const customerId =
     typeof sub.customer === "string" ? sub.customer : sub.customer?.id
+
+  const { periodStart, periodEnd, usedFallback } =
+    resolveSubscriptionPeriodOrFallback(sub)
+  if (usedFallback) {
+    console.warn("[stripe] invoice.paid: período ausente; usando fallback", {
+      subId,
+      current_period_start: sub?.current_period_start,
+      current_period_end: sub?.current_period_end,
+    })
+  }
 
   await prisma.$transaction(async (tx) => {
     const inv = await tx.invoice.upsert({
@@ -215,8 +252,6 @@ async function handleInvoicePaid(invoice) {
       })
     }
 
-    const periodStart = new Date(sub.current_period_start * 1000)
-    const periodEnd = new Date(sub.current_period_end * 1000)
     await tx.userSubscription.upsert({
       where: { userId },
       create: {
@@ -265,14 +300,21 @@ async function handleInvoicePaymentFailed(invoice) {
     expand: ["default_payment_method"],
   })
   const userId = await resolveUserIdFromStripeSubscription(sub, stripe)
-  if (!userId) return
+  if (userId == null) return
   const plan = await resolvePlanFromStripeSubscription(sub)
   if (!plan) return
   const customerId =
     typeof sub.customer === "string" ? sub.customer : sub.customer?.id
   const card = await extractPmCardFromSub(sub, stripe)
-  const periodStart = new Date(sub.current_period_start * 1000)
-  const periodEnd = new Date(sub.current_period_end * 1000)
+  const { periodStart, periodEnd, usedFallback } =
+    resolveSubscriptionPeriodOrFallback(sub)
+  if (usedFallback) {
+    console.warn("[stripe] invoice.payment_failed: período ausente; usando fallback", {
+      subId,
+      current_period_start: sub?.current_period_start,
+      current_period_end: sub?.current_period_end,
+    })
+  }
   await prisma.userSubscription.upsert({
     where: { userId },
     create: {
@@ -308,7 +350,7 @@ async function handleInvoicePaymentFailed(invoice) {
 async function handleSubscriptionUpdated(sub) {
   const stripe = getStripe()
   const userId = await resolveUserIdFromStripeSubscription(sub, stripe)
-  if (!userId) return
+  if (userId == null) return
   if (sub.status !== "active" && sub.status !== "past_due") return
 
   const plan = await resolvePlanFromStripeSubscription(sub)
@@ -318,8 +360,16 @@ async function handleSubscriptionUpdated(sub) {
   const customerId =
     typeof sub.customer === "string" ? sub.customer : sub.customer?.id
 
-  const periodStart = new Date(sub.current_period_start * 1000)
-  const periodEnd = new Date(sub.current_period_end * 1000)
+  const { periodStart, periodEnd, usedFallback } =
+    resolveSubscriptionPeriodOrFallback(sub)
+  if (usedFallback) {
+    console.warn("[stripe] subscription.updated: período ausente; usando fallback", {
+      subscriptionId: sub?.id,
+      status: sub?.status,
+      current_period_start: sub?.current_period_start,
+      current_period_end: sub?.current_period_end,
+    })
+  }
   await prisma.userSubscription.upsert({
     where: { userId },
     create: {
@@ -355,7 +405,7 @@ async function handleSubscriptionUpdated(sub) {
 async function handleSubscriptionDeleted(sub) {
   const stripe = getStripe()
   const userId = await resolveUserIdFromStripeSubscription(sub, stripe)
-  if (!userId) return
+  if (userId == null) return
   const free = await prisma.plan.findUnique({ where: { slug: "free" } })
   if (!free) return
   const now = new Date()
