@@ -31,6 +31,7 @@ import { listPlans } from "../controllers/planController.js"
 import { getUserProfile } from "../controllers/userController.js"
 import {
   postCancelSubscription,
+  postResumeSubscription,
   postCreateSubscription,
   getBillingInvoices,
 } from "../controllers/billingController.js"
@@ -47,6 +48,7 @@ router.get("/account/summary", getAccountSummary)
 router.get("/plans", listPlans)
 router.post("/billing/create-subscription", postCreateSubscription)
 router.post("/billing/cancel-subscription", postCancelSubscription)
+router.post("/billing/resume-subscription", postResumeSubscription)
 router.get("/billing/invoices", getBillingInvoices)
 router.get("/users/profile", getUserProfile)
 router.post("/auth/register", register)

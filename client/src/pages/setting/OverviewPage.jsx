@@ -2,7 +2,11 @@ import { useEffect, useState } from "react"
 import { Link, useNavigate, useOutletContext } from "react-router-dom"
 import { Check, Rocket, Sparkles } from "lucide-react"
 import { useBillingData } from "../../hooks/useBillingData"
-import { cancelStripeSubscription, getPlans } from "../../services/api"
+import {
+  cancelStripeSubscription,
+  resumeStripeSubscription,
+  getPlans,
+} from "../../services/api"
 import { formatBrlFromCents, formatDatePt } from "../../lib/creditUi"
 import { buildPaymentLink } from "../../lib/stripePaymentLinks"
 
@@ -78,7 +82,12 @@ export default function OverviewPage() {
     const navigate = useNavigate()
     const { user } = useOutletContext()
     const userId = user?.id != null ? String(user.id).trim() : ""
-    const { summary, loading: summaryLoading, error } = useBillingData(userId)
+    const {
+        summary,
+        loading: summaryLoading,
+        error,
+        reload: reloadBilling,
+    } = useBillingData(userId)
   const [cancelLoading, setCancelLoading] = useState(false)
 
     const [plans, setPlans] = useState([])
@@ -113,6 +122,7 @@ export default function OverviewPage() {
 
     const currentSlug = summary?.subscription?.plan?.slug ?? null
     const canCancel = Boolean(summary?.subscription?.externalSubscriptionId)
+    const cancelAtPeriodEnd = Boolean(summary?.subscription?.cancelAtPeriodEnd)
     const planLabel =
         summary?.subscription?.plan?.name ?? "Sem assinatura ativa"
     const remaining = summary?.usage?.remaining ?? 0
@@ -215,27 +225,66 @@ export default function OverviewPage() {
                                     </span>
                                 </p>
                                 <p className="text-xs text-neutral-500 mt-2">
-                                    Renova em:{" "}
+                                    {cancelAtPeriodEnd
+                                        ? "Expira em"
+                                        : "Renova em"}
+                                    :{" "}
                                     <span className="text-neutral-700">
                                         {renewLabel}
                                     </span>
                                 </p>
                             </div>
                             <div className="flex flex-col sm:flex-row gap-2">
-                                {canCancel && (
+                                {canCancel && cancelAtPeriodEnd && (
                                     <button
                                         type="button"
                                         disabled={cancelLoading}
                                         onClick={() => {
                                             const ok = window.confirm(
-                                                "Cancelar assinatura?\n\n- A cobrança na Stripe será cancelada.\n- Seu plano será atualizado para Free pelo webhook (pode levar alguns segundos).\n- Seus créditos atuais serão mantidos."
+                                                "Manter assinatura?\n\nA renovação automática será ligada novamente."
+                                            )
+                                            if (!ok) return
+                                            setCancelLoading(true)
+                                            resumeStripeSubscription(userId)
+                                                .then(() => {
+                                                    void reloadBilling()
+                                                    window.alert(
+                                                        "Renovação automática reativada."
+                                                    )
+                                                })
+                                                .catch((e) => {
+                                                    const msg =
+                                                        e?.response?.data?.message ||
+                                                        e?.message ||
+                                                        "Erro ao reativar assinatura."
+                                                    window.alert(msg)
+                                                })
+                                                .finally(() =>
+                                                    setCancelLoading(false)
+                                                )
+                                        }}
+                                        className="inline-flex justify-center rounded-xl border border-emerald-200 bg-white text-emerald-800 text-sm font-semibold px-5 py-2.5 hover:bg-emerald-50 disabled:opacity-50"
+                                    >
+                                        {cancelLoading
+                                            ? "Salvando…"
+                                            : "Manter assinatura"}
+                                    </button>
+                                )}
+                                {canCancel && !cancelAtPeriodEnd && (
+                                    <button
+                                        type="button"
+                                        disabled={cancelLoading}
+                                        onClick={() => {
+                                            const ok = window.confirm(
+                                                "Cancelar ao fim do período?\n\n- Você continua com o plano e o acesso até a data indicada acima.\n- Depois disso, o plano volta para Free (seus créditos atuais permanecem).\n- Você pode reativar a renovação antes dessa data."
                                             )
                                             if (!ok) return
                                             setCancelLoading(true)
                                             cancelStripeSubscription(userId)
                                                 .then(() => {
+                                                    void reloadBilling()
                                                     window.alert(
-                                                        "Cancelamento solicitado. Aguarde alguns segundos e atualize a página."
+                                                        "Cancelamento agendado para o fim do período de cobrança."
                                                     )
                                                 })
                                                 .catch((e) => {
@@ -362,14 +411,15 @@ export default function OverviewPage() {
                                             if (slug === "free") {
                                                 if (!userId) return
                                                 const ok = window.confirm(
-                                                    "Voltar para o plano Free?\n\n- Seus créditos atuais serão mantidos.\n- A renovação mensal passará a conceder 20 créditos.\n- A assinatura paga será cancelada (se existir)."
+                                                    "Voltar para o plano Free?\n\n- Seus créditos atuais serão mantidos.\n- A renovação mensal passará a conceder 20 créditos.\n- A assinatura paga será encerrada ao fim do período atual (você mantém o plano até lá)."
                                                 )
                                                 if (!ok) return
                                                 setCancelLoading(true)
                                                 cancelStripeSubscription(userId)
                                                     .then(() => {
+                                                        void reloadBilling()
                                                         window.alert(
-                                                            "Cancelamento solicitado. Aguarde alguns segundos e atualize a página."
+                                                            "Cancelamento agendado para o fim do período."
                                                         )
                                                     })
                                                     .catch((e) => {
