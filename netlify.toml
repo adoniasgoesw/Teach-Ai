@@ -1,0 +1,11 @@
+[build]
+  base = "client"
+  command = "npm run build"
+  publish = "dist"
+
+# Netlify Secrets Scanning
+# - Stripe publishable key (pk_...) is not a secret; it must ship to the browser.
+# - Keep server secrets (sk_...) ONLY on the backend (Render), never on Netlify.
+[build.environment]
+  SECRETS_SCAN_OMIT_KEYS = "VITE_STRIPE_PUBLISHABLE_KEY"
+
