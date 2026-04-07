@@ -1,6 +1,9 @@
 import { prisma } from "../lib/prisma.js"
 import { getStripe } from "../lib/stripeServer.js"
-import { planSlugFromStripePriceId } from "../lib/stripePlanEnv.js"
+import {
+  planSlugFromStripePriceId,
+  planSlugFromStripeProductId,
+} from "../lib/stripePlanEnv.js"
 import { addOneCalendarMonth } from "../lib/subscriptionCredits.js"
 
 function prismaSubStatus(stripeStatus) {
@@ -51,9 +54,23 @@ async function resolvePlanFromStripeSubscription(sub) {
     })
     if (p) return p
   }
-  const priceId = sub.items?.data?.[0]?.price?.id
-  const slug = planSlugFromStripePriceId(priceId)
-  if (!slug) return null
+  const item0 = sub.items?.data?.[0]
+  const priceId = item0?.price?.id
+  const productRaw = item0?.price?.product
+  const productId =
+    typeof productRaw === "string" ? productRaw : productRaw?.id
+
+  let slug = planSlugFromStripePriceId(priceId)
+  if (!slug && productId) {
+    slug = planSlugFromStripeProductId(productId)
+  }
+  if (!slug) {
+    console.warn(
+      "[stripe] Plano não mapeado. Defina STRIPE_PRICE_* ou STRIPE_PRODUCT_* no servidor.",
+      { priceId, productId }
+    )
+    return null
+  }
   return prisma.plan.findUnique({ where: { slug } })
 }
 
