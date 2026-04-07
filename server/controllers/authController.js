@@ -48,6 +48,9 @@ export async function register(req, res) {
         password: hashedPassword,
         createdAt: new Date(),
         updatedAt: new Date(),
+        creditWallet: {
+          create: { balance: 20 },
+        },
       },
       select: {
         id: true,

@@ -28,12 +28,13 @@ export default function ListCourses({ user }) {
 
   return (
     <div className="h-full w-full">
-      <div className="grid grid-cols-3 gap-4 ">
+      <div className="grid grid-cols-5 gap-4 ">
         {courses.map((course) => (
           <CardCourse
             key={course.id}
             name={course.name}
-            description={course.description}
+            createdAt={course.createdAt}
+            sourcesCount={course?._count?.sources}
             icon={course.icon}
             course={course}
           />

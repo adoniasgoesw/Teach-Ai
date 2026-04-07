@@ -2,6 +2,13 @@ node_modules
 # Keep environment variables out of version control
 .env
 
+# Google Cloud service account JSON (never commit)
+keys/
+/teach-ai-*.json
+
+# Uploads (multer)
+uploads/
+
 /prisma/src/generated/prisma
 
 /prisma/src/generated/prisma

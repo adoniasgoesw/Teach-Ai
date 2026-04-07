@@ -6,6 +6,205 @@ datasource db {
   provider = "postgresql"
 }
 
+// ---------------------------------------------------------------------------
+// TeachAI Credits — planos, assinatura, créditos, atividades (ledger), faturas
+// ---------------------------------------------------------------------------
+
+/// Catálogo fixo de planos (Free, Pro, Plus, Ultra).
+model Plan {
+  id                 String   @id @default(cuid())
+  slug               String   @unique
+  name               String
+  /// Créditos concedidos a cada renovação do ciclo
+  monthlyCredits     Int
+  /// Preço da assinatura em centavos (BRL). Free = 0.
+  priceMonthlyCents  Int      @default(0)
+  /// Ordem na UI
+  sortOrder          Int      @default(0)
+  active             Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  subscriptions UserSubscription[]
+  invoices      Invoice[]
+}
+
+/// Assinatura atual do usuário (uma ativa por usuário). Renovação = novo ciclo + grant de créditos.
+model UserSubscription {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  planId String
+  plan   Plan   @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  status SubscriptionStatus @default(ACTIVE)
+
+  currentPeriodStart DateTime
+  currentPeriodEnd   DateTime
+
+  /// Créditos do plano neste ciclo (cópia de Plan.monthlyCredits na abertura do período)
+  creditsIncludedThisPeriod Int
+
+  /// Último pagamento reconhecido da assinatura (centavos BRL)
+  lastPaymentAmountCents Int?
+  lastPaymentAt          DateTime?
+
+  externalCustomerId     String?
+  externalSubscriptionId String?
+
+  /// Cartão padrão (espelho Stripe; não armazenamos PAN completo).
+  cardLast4    String?
+  cardBrand    String?
+  cardExpMonth Int?
+  cardExpYear  Int?
+
+  canceledAt DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+/// Saldo atual de créditos (atualizado junto com cada CreditTransaction, em transação de app).
+model CreditWallet {
+  userId    String   @id
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  balance   Int      @default(0)
+  updatedAt DateTime @updatedAt
+}
+
+/// Ledger: toda movimentação (enviou PDF -2, renovou +20, upgrade de plano, etc.).
+model CreditTransaction {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Positivo = entrada; negativo = consumo.
+  amount       Int
+  type         CreditTransactionType
+  balanceAfter Int
+
+  /// Rótulo curto para UI ("Upload PDF", "Áudio", "Renovação do plano")
+  label    String?
+  metadata Json?
+
+  invoiceId String?
+  invoice   Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt(sort: Desc)])
+}
+
+/// Fatura (ex.: assinatura de plano).
+model Invoice {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  planId String?
+  plan   Plan?   @relation(fields: [planId], references: [id], onDelete: SetNull)
+
+  amountCents Int
+  currency    String         @default("BRL")
+  status      InvoiceStatus  @default(PENDING)
+
+  description String?
+  paidAt      DateTime?
+  dueAt       DateTime?
+
+  /// id da invoice na Stripe (in_…)
+  externalId       String? @unique
+  /// Link para fatura/recibo na Stripe (quando existir).
+  hostedInvoiceUrl String?
+  metadata         Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  creditTransactions CreditTransaction[]
+
+  @@index([userId, createdAt(sort: Desc)])
+}
+
+/// Uma linha — referência de valor do crédito nos planos (centavos BRL). Id fixo "default".
+model BillingConfig {
+  id String @id @default("default")
+
+  /// Ex.: 10 = R$ 0,10 por crédito (referência comercial / relatórios)
+  creditUnitCents Int @default(10)
+
+  updatedAt DateTime @updatedAt
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  TRIALING
+  INCOMPLETE
+}
+
+enum CreditTransactionType {
+  PLAN_PERIOD_GRANT
+  PLAN_CHANGE_ADJUST
+  PDF_UPLOAD
+  TTS_AUDIO
+  AI_SUMMARY
+  AI_QUIZ
+  AI_FLASHCARDS
+  AI_NOTES
+  ADMIN_ADJUST
+  REFUND
+}
+
+enum InvoiceStatus {
+  DRAFT
+  PENDING
+  PAID
+  FAILED
+  VOID
+}
+
+// ---------------------------------------------------------------------------
+// AI jobs (evita gerar/cobrar duplicado ao clicar várias vezes)
+// ---------------------------------------------------------------------------
+
+enum SourceAiJobKind {
+  QUIZ
+  FLASHCARDS
+  NOTES
+  AUDIO
+}
+
+enum SourceAiJobStatus {
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+}
+
+model SourceAiJob {
+  id       String @id @default(cuid())
+  sourceId String
+  source   Source @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  kind   SourceAiJobKind
+  status SourceAiJobStatus @default(IN_PROGRESS)
+
+  userId String?
+  error  String?
+
+  startedAt  DateTime @default(now())
+  finishedAt DateTime?
+  updatedAt  DateTime @updatedAt
+
+  @@unique([sourceId, kind])
+  @@index([sourceId, kind])
+}
+
+// ---------------------------------------------------------------------------
+// Core app
+// ---------------------------------------------------------------------------
+
 model User {
   id        String   @id
   name      String?
@@ -13,15 +212,102 @@ model User {
   password  String
   createdAt DateTime @default(now())
   updatedAt DateTime
-  courses   Course[]
+
+  /// Customer id na Stripe (cus_…)
+  stripeCustomerId String? @unique
+
+  courses Course[]
+
+  subscription         UserSubscription?
+  creditWallet         CreditWallet?
+  creditTransactions CreditTransaction[]
+  invoices             Invoice[]
 }
 
 model Course {
   id          String   @id @default(cuid())
   name        String
-  description String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   userId      String
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sources     Source[]
+}
+
+model Source {
+  id         String       @id @default(cuid())
+  courseId   String
+  course     Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  filename   String?
+  text       String?      @db.Text
+  titlesJson Json?
+  createdAt  DateTime     @default(now())
+  lessons    Lesson[]
+  audio      SourceAudio?
+  quizzes    Quiz[]
+  flashcards Flashcard[]
+  sourceNote SourceNote?
+  aiJobs     SourceAiJob[]
+}
+
+/// Áudio TTS único (curso/fonte) em MP3; reutilizado enquanto o texto (hash) for o mesmo.
+model SourceAudio {
+  id        String   @id @default(cuid())
+  sourceId  String   @unique
+  source    Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  data      Bytes
+  mimeType  String   @default("audio/mpeg")
+  textHash  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Lesson {
+  id          String  @id @default(cuid())
+  sourceId    String
+  source      Source  @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  title       String
+  isSubtitle  Boolean @default(false)
+  parentTitle String?
+  order       Int?
+  content     String  @db.Text
+  createdAt   DateTime @default(now())
+}
+
+/// Perguntas objetivas da fonte (PDF) inteira — geradas por IA, cache por sourceId.
+model Quiz {
+  id             String   @id @default(cuid())
+  sourceId       String
+  source         Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  question       String   @db.Text
+  alternatives   Json
+  correctIndex   Int
+  /// easy | medium | hard
+  difficulty     String?
+  order          Int?
+  createdAt      DateTime @default(now())
+
+  @@index([sourceId])
+}
+
+model Flashcard {
+  id           String   @id @default(cuid())
+  sourceId     String
+  source       Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  term         String   @db.Text
+  definition   String   @db.Text
+  order        Int?
+  createdAt    DateTime @default(now())
+
+  @@index([sourceId])
+}
+
+/// Uma anotação acadêmica consolidada por fonte (texto longo).
+model SourceNote {
+  id        String   @id @default(cuid())
+  sourceId  String   @unique
+  source    Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

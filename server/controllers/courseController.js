@@ -2,7 +2,7 @@ import { prisma } from "../lib/prisma.js"
 
 export async function createCourse(req, res) {
   try {
-    const { name, description, userId } = req.body
+    const { name, userId } = req.body
 
     if (!userId) {
       return res.status(400).json({ message: "O ID do usuário é obrigatório." })
@@ -32,13 +32,11 @@ export async function createCourse(req, res) {
       data: {
         id: nextId,
         name,
-        description: description || null,
         userId: user.id,
       },
       select: {
         id: true,
         name: true,
-        description: true,
         createdAt: true,
         updatedAt: true,
         userId: true,
@@ -75,6 +73,14 @@ export async function listCourses(req, res) {
     const courses = await prisma.course.findMany({
       where: { userId: user.id },
       orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        name: true,
+        createdAt: true,
+        updatedAt: true,
+        userId: true,
+        _count: { select: { sources: true } },
+      },
     })
 
     return res.status(200).json({ courses })

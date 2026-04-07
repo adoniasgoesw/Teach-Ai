@@ -11,9 +11,12 @@ async function start() {
     await pool.query("SELECT 1")
     console.log("✅ Connected to database")
 
-    app.listen(port, () => {
+    const httpServer = app.listen(port, () => {
       console.log(`🚀 API running on http://localhost:${port}`)
     })
+    const longMs = 900_000
+    httpServer.requestTimeout = longMs
+    httpServer.headersTimeout = longMs + 10_000
   } catch (err) {
     console.error("❌ Failed to connect to database", err)
     process.exit(1)

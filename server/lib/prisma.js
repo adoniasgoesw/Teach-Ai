@@ -1,9 +1,19 @@
 import "dotenv/config"
+import pg from "pg"
 import { PrismaClient } from "@prisma/client"
 import { PrismaPg } from "@prisma/adapter-pg"
 
 const connectionString = process.env.DATABASE_URL
-const adapter = new PrismaPg({ connectionString })
+
+const poolForPrisma = new pg.Pool({
+  connectionString,
+  ssl: { rejectUnauthorized: false },
+  max: 10,
+  connectionTimeoutMillis: 30_000,
+  idleTimeoutMillis: 60_000,
+})
+
+const adapter = new PrismaPg(poolForPrisma)
 
 const globalForPrisma = globalThis
 

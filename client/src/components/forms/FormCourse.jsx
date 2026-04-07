@@ -8,7 +8,6 @@ export default function FormCourse({ onClose }) {
     const navigate = useNavigate()
 
     const [name, setName] = useState("")
-    const [description, setDescription] = useState("")
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState("")
 
@@ -29,23 +28,21 @@ export default function FormCourse({ onClose }) {
 
             const data = await createCourse({
                 name,
-                description,
                 userId: user.id,
             })
 
             const course = data.course || data
 
-            console.log("Course created:", course)
-
             setName("")
-            setDescription("")
 
             onClose?.()
             navigate(`/course/${course.id}`)
         } catch (err) {
             console.error(err)
             const message =
-                err?.response?.data?.message || "Erro ao criar curso. Tente novamente."
+                err?.response?.data?.message ||
+                err?.message ||
+                "Erro ao criar curso. Tente novamente."
             setError(message)
         } finally {
             setLoading(false)
@@ -55,7 +52,9 @@ export default function FormCourse({ onClose }) {
     return (
         <article className="absolute  top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 border-2 border-gray-200 w-full md:w-[60%] lg:w-1/3 flex flex-col items-start justify-center gap-5 p-4 rounded-lg bg-white shadow-lg">
             <div className="flex items-center justify-between w-full">
-                <h2 className="text-2xl font-normal">Create a new course</h2>
+                <h2 className="text-2xl font-normal text-neutral-900">
+                    Criar novo curso
+                </h2>
                 <Button
                     variant="ghost"
                     size="icon"
@@ -69,35 +68,26 @@ export default function FormCourse({ onClose }) {
                 className="flex flex-col items-start justify-center gap-4 w-full"
             >
                 <div className="flex flex-col items-start justify-center gap-2 w-full">
-                    <label>Course name</label>
+                    <label className="text-sm font-medium text-neutral-700">
+                        Nome do curso
+                    </label>
                     <input
                         type="text"
-                        placeholder="Tell me the course name"
+                        placeholder="Ex.: JavaScript do zero"
                         value={name}
                         onChange={(e) => setName(e.target.value)}
-                        className="w-full"
-                    />
-                </div>
-
-                <div className="flex flex-col items-start justify-center gap-2 w-full">
-                    <label>Description</label>
-                    <textarea
-                        placeholder="Describe what this course is about"
-                        value={description}
-                        onChange={(e) => setDescription(e.target.value)}
-                        className="w-full min-h-[80px] resize-none"
+                        required
+                        className="w-full rounded-lg border border-neutral-200 px-3 py-2 text-sm"
                     />
                 </div>
 
                 {error && (
-                    <p className="text-red-500 text-sm w-full">
-                        {error}
-                    </p>
+                    <p className="text-red-500 text-sm w-full">{error}</p>
                 )}
 
                 <div className="flex flex-col items-center justify-center gap-2 w-full">
                     <Button
-                        text={loading ? "Creating..." : "Create course"}
+                        text={loading ? "Criando…" : "Criar curso"}
                         variant="secondary"
                         size="md"
                         type="submit"
