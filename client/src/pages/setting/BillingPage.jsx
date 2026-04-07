@@ -1,5 +1,7 @@
+import { useEffect, useState } from "react"
 import { useOutletContext } from "react-router-dom"
 import { useBillingData } from "../../hooks/useBillingData"
+import { getBillingInvoices } from "../../services/api"
 import { formatBrlFromCents, formatDatePt } from "../../lib/creditUi"
 
 const STATUS_LABEL = {
@@ -10,14 +12,57 @@ const STATUS_LABEL = {
   INCOMPLETE: "Incompleta",
 }
 
+const INVOICE_STATUS_LABEL = {
+  DRAFT: "Rascunho",
+  PENDING: "Pendente",
+  PAID: "Paga",
+  FAILED: "Falhou",
+  VOID: "Cancelada",
+}
+
 export default function BillingPage() {
     const { user } = useOutletContext()
     const userId = user?.id != null ? String(user.id).trim() : ""
     const { summary, loading, error } = useBillingData(userId)
+    const [invoices, setInvoices] = useState([])
+    const [invoicesLoading, setInvoicesLoading] = useState(true)
+    const [invoicesError, setInvoicesError] = useState(null)
 
     const sub = summary?.subscription
     const plan = sub?.plan
     const priceCents = plan?.priceMonthlyCents ?? 0
+
+    useEffect(() => {
+        let cancelled = false
+        if (!userId) {
+            setInvoices([])
+            setInvoicesLoading(false)
+            setInvoicesError(null)
+            return
+        }
+        setInvoicesLoading(true)
+        setInvoicesError(null)
+        getBillingInvoices(userId, 50)
+            .then((data) => {
+                if (cancelled) return
+                setInvoices(Array.isArray(data?.invoices) ? data.invoices : [])
+            })
+            .catch((e) => {
+                if (cancelled) return
+                setInvoices([])
+                setInvoicesError(
+                    e?.response?.data?.message ||
+                        e?.message ||
+                        "Erro ao carregar faturas."
+                )
+            })
+            .finally(() => {
+                if (!cancelled) setInvoicesLoading(false)
+            })
+        return () => {
+            cancelled = true
+        }
+    }, [userId])
 
     return (
         <div className="max-w-2xl space-y-8 pb-8">
@@ -108,14 +153,88 @@ export default function BillingPage() {
                 <h2 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-2">
                     Faturas
                 </h2>
-                <p className="text-sm text-neutral-600">
-                    Nenhuma fatura registrada no sistema para esta conta. Quando
-                    houver cobrança recorrente, os registros de{" "}
-                    <code className="text-xs bg-white px-1 rounded border">
-                        Invoice
-                    </code>{" "}
-                    aparecerão aqui.
-                </p>
+                {invoicesError && (
+                    <p className="text-sm text-red-600 rounded-lg border border-red-100 bg-red-50 px-3 py-2 mb-3">
+                        {invoicesError}
+                    </p>
+                )}
+
+                {invoicesLoading ? (
+                    <p className="text-sm text-neutral-600">Carregando faturas…</p>
+                ) : invoices.length === 0 ? (
+                    <p className="text-sm text-neutral-600">
+                        Nenhuma fatura registrada no sistema para esta conta.
+                    </p>
+                ) : (
+                    <div className="overflow-x-auto rounded-lg border border-neutral-200 bg-white">
+                        <table className="w-full text-sm text-left min-w-[560px]">
+                            <thead>
+                                <tr className="bg-neutral-50 border-b border-neutral-100">
+                                    <th className="px-4 py-2.5 font-medium text-neutral-600">
+                                        Data
+                                    </th>
+                                    <th className="px-4 py-2.5 font-medium text-neutral-600">
+                                        Descrição
+                                    </th>
+                                    <th className="px-4 py-2.5 font-medium text-neutral-600">
+                                        Vencimento
+                                    </th>
+                                    <th className="px-4 py-2.5 font-medium text-neutral-600">
+                                        Valor
+                                    </th>
+                                    <th className="px-4 py-2.5 font-medium text-neutral-600">
+                                        Status
+                                    </th>
+                                    <th className="px-4 py-2.5 font-medium text-neutral-600">
+                                        Link
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {invoices.map((inv) => (
+                                    <tr
+                                        key={inv.id}
+                                        className="border-b border-neutral-100 last:border-b-0"
+                                    >
+                                        <td className="px-4 py-2.5 text-neutral-800">
+                                            {inv.paidAt
+                                                ? formatDatePt(inv.paidAt)
+                                                : formatDatePt(inv.createdAt)}
+                                        </td>
+                                        <td className="px-4 py-2.5 text-neutral-700">
+                                            {inv.description || "—"}
+                                        </td>
+                                        <td className="px-4 py-2.5 text-neutral-700">
+                                            {inv.dueAt ? formatDatePt(inv.dueAt) : "—"}
+                                        </td>
+                                        <td className="px-4 py-2.5 text-neutral-900 tabular-nums">
+                                            {formatBrlFromCents(inv.amountCents ?? 0)}
+                                        </td>
+                                        <td className="px-4 py-2.5 text-neutral-800">
+                                            {INVOICE_STATUS_LABEL[inv.status] ||
+                                                inv.status ||
+                                                "—"}
+                                        </td>
+                                        <td className="px-4 py-2.5">
+                                            {inv.hostedInvoiceUrl ? (
+                                                <a
+                                                    href={inv.hostedInvoiceUrl}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="text-violet-700 hover:underline"
+                                                >
+                                                    Abrir
+                                                </a>
+                                            ) : (
+                                                <span className="text-neutral-400">—</span>
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
             </section>
         </div>
     )

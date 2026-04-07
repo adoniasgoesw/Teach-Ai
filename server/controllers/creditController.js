@@ -1,4 +1,5 @@
 import { prisma } from "../lib/prisma.js"
+import { syncUserSubscriptionCredits } from "../lib/subscriptionCredits.js"
 
 const DEFAULT_TX_TAKE = 80
 
@@ -60,6 +61,10 @@ export async function getAccountSummary(req, res) {
     if (!userId) {
       return res.status(400).json({ message: "userId é obrigatório." })
     }
+
+    // Aplica concessões mensais do plano Free/legado quando o ciclo vence.
+    // Para planos Stripe, a concessão vem dos webhooks (invoice.paid) e o sync não mexe.
+    await syncUserSubscriptionCredits(userId)
 
     const user = await prisma.user.findUnique({
       where: { id: userId },

@@ -5,6 +5,7 @@ import {
   stripePriceIdForSlug,
 } from "../lib/stripePlanEnv.js"
 import { syncUserSubscriptionCredits } from "../lib/subscriptionCredits.js"
+import { addOneCalendarMonth } from "../lib/subscriptionCredits.js"
 
 /**
  * POST /api/billing/create-subscription
@@ -162,5 +163,142 @@ export async function postCreateSubscription(req, res) {
     console.error("[billing] create-subscription:", err)
     const msg = err?.raw?.message || err?.message || "Erro ao criar assinatura."
     return res.status(500).json({ message: msg })
+  }
+}
+
+/**
+ * POST /api/billing/cancel-subscription
+ * Body: { userId }
+ *
+ * Cancela a assinatura Stripe (se existir) e troca o plano local para Free.
+ * Não reseta nem reduz o saldo atual — apenas muda o plano para a próxima renovação.
+ */
+export async function postCancelSubscription(req, res) {
+  try {
+    const userId =
+      req.body?.userId != null ? String(req.body.userId).trim() : ""
+    if (!userId) {
+      return res.status(400).json({ message: "userId é obrigatório." })
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, stripeCustomerId: true },
+    })
+    if (!user) return res.status(404).json({ message: "Usuário não encontrado." })
+
+    const free = await prisma.plan.findUnique({ where: { slug: "free" } })
+    if (!free) {
+      return res.status(503).json({ message: "Plano free não encontrado no catálogo." })
+    }
+
+    const subRow = await prisma.userSubscription.findUnique({
+      where: { userId },
+      include: { plan: { select: { slug: true } } },
+    })
+
+    if (!subRow) {
+      // Garante que usuário pelo menos tenha sub free criada.
+      const now = new Date()
+      await prisma.userSubscription.create({
+        data: {
+          userId,
+          planId: free.id,
+          status: "ACTIVE",
+          currentPeriodStart: now,
+          currentPeriodEnd: addOneCalendarMonth(now),
+          creditsIncludedThisPeriod: free.monthlyCredits,
+        },
+      })
+      return res.status(200).json({ ok: true, planSlug: "free" })
+    }
+
+    if (subRow.plan?.slug === "free" && !subRow.externalSubscriptionId) {
+      return res.status(200).json({ ok: true, planSlug: "free" })
+    }
+
+    if (subRow.externalSubscriptionId) {
+      const stripe = getStripe()
+      try {
+        await stripe.subscriptions.cancel(subRow.externalSubscriptionId)
+      } catch (e) {
+        console.warn("[billing] cancel-subscription: stripe cancel failed", e?.message || e)
+      }
+    }
+
+    const now = new Date()
+    await prisma.userSubscription.update({
+      where: { userId },
+      data: {
+        planId: free.id,
+        status: "ACTIVE",
+        externalSubscriptionId: null,
+        externalCustomerId: null,
+        creditsIncludedThisPeriod: free.monthlyCredits,
+        currentPeriodStart: now,
+        currentPeriodEnd: addOneCalendarMonth(now),
+        cardLast4: null,
+        cardBrand: null,
+        cardExpMonth: null,
+        cardExpYear: null,
+        lastPaymentAmountCents: null,
+        lastPaymentAt: null,
+      },
+    })
+
+    return res.status(200).json({ ok: true, planSlug: "free" })
+  } catch (err) {
+    console.error("[billing] cancel-subscription:", err)
+    return res.status(500).json({ message: "Erro ao cancelar assinatura." })
+  }
+}
+
+/**
+ * GET /api/billing/invoices?userId=&take=
+ * Lista faturas registradas no banco (Stripe + local).
+ */
+export async function getBillingInvoices(req, res) {
+  try {
+    const userId =
+      req.query?.userId != null ? String(req.query.userId).trim() : ""
+    if (!userId) {
+      return res.status(400).json({ message: "userId é obrigatório." })
+    }
+
+    const takeRaw = Number(req.query?.take)
+    const take = Number.isFinite(takeRaw)
+      ? Math.min(200, Math.max(1, Math.floor(takeRaw)))
+      : 50
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    })
+    if (!user) {
+      return res.status(404).json({ message: "Usuário não encontrado." })
+    }
+
+    const invoices = await prisma.invoice.findMany({
+      where: { userId },
+      orderBy: [{ createdAt: "desc" }],
+      take,
+      select: {
+        id: true,
+        amountCents: true,
+        currency: true,
+        status: true,
+        description: true,
+        paidAt: true,
+        dueAt: true,
+        externalId: true,
+        hostedInvoiceUrl: true,
+        createdAt: true,
+      },
+    })
+
+    return res.status(200).json({ invoices })
+  } catch (err) {
+    console.error("[billing] invoices:", err)
+    return res.status(500).json({ message: "Erro ao listar faturas." })
   }
 }

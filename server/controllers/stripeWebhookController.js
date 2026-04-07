@@ -174,7 +174,8 @@ async function handleInvoicePaid(invoice) {
   const amountPaid = invoice.amount_paid ?? 0
   const grantPeriod =
     (billingReason === "subscription_create" ||
-      billingReason === "subscription_cycle") &&
+      billingReason === "subscription_cycle" ||
+      billingReason === "subscription_update") &&
     amountPaid > 0
 
   const card = await extractPmCardFromSub(sub, stripe)
@@ -315,35 +316,67 @@ async function handleInvoicePaymentFailed(invoice) {
       current_period_end: sub?.current_period_end,
     })
   }
-  await prisma.userSubscription.upsert({
-    where: { userId },
-    create: {
-      userId,
-      planId: plan.id,
-      status: "PAST_DUE",
-      currentPeriodStart: periodStart,
-      currentPeriodEnd: periodEnd,
-      creditsIncludedThisPeriod: plan.monthlyCredits,
-      externalSubscriptionId: sub.id,
-      externalCustomerId: customerId ?? undefined,
-      cardLast4: card?.last4 ?? null,
-      cardBrand: card?.brand ?? null,
-      cardExpMonth: card?.exp_month ?? null,
-      cardExpYear: card?.exp_year ?? null,
-    },
-    update: {
-      status: "PAST_DUE",
-      planId: plan.id,
-      currentPeriodStart: periodStart,
-      currentPeriodEnd: periodEnd,
-      creditsIncludedThisPeriod: plan.monthlyCredits,
-      externalSubscriptionId: sub.id,
-      externalCustomerId: customerId ?? undefined,
-      cardLast4: card?.last4 ?? null,
-      cardBrand: card?.brand ?? null,
-      cardExpMonth: card?.exp_month ?? null,
-      cardExpYear: card?.exp_year ?? null,
-    },
+
+  const invId = invoice.id
+  const amountDue =
+    invoice.amount_due ?? invoice.amount_remaining ?? invoice.amount_paid ?? 0
+
+  await prisma.$transaction(async (tx) => {
+    await tx.invoice.upsert({
+      where: { externalId: invId },
+      create: {
+        userId,
+        planId: plan.id,
+        amountCents: amountDue,
+        currency: String(invoice.currency || "brl").toUpperCase(),
+        status: "FAILED",
+        description:
+          invoice.description?.trim() || `Assinatura TeachAI — ${plan.name}`,
+        paidAt: null,
+        dueAt: invoice.due_date ? new Date(invoice.due_date * 1000) : null,
+        externalId: invId,
+        hostedInvoiceUrl: invoice.hosted_invoice_url || null,
+        metadata: { stripe: true, billingReason: invoice.billing_reason, failed: true },
+      },
+      update: {
+        planId: plan.id,
+        amountCents: amountDue,
+        status: "FAILED",
+        hostedInvoiceUrl: invoice.hosted_invoice_url || null,
+        metadata: { stripe: true, billingReason: invoice.billing_reason, failed: true },
+      },
+    })
+
+    await tx.userSubscription.upsert({
+      where: { userId },
+      create: {
+        userId,
+        planId: plan.id,
+        status: "PAST_DUE",
+        currentPeriodStart: periodStart,
+        currentPeriodEnd: periodEnd,
+        creditsIncludedThisPeriod: plan.monthlyCredits,
+        externalSubscriptionId: sub.id,
+        externalCustomerId: customerId ?? undefined,
+        cardLast4: card?.last4 ?? null,
+        cardBrand: card?.brand ?? null,
+        cardExpMonth: card?.exp_month ?? null,
+        cardExpYear: card?.exp_year ?? null,
+      },
+      update: {
+        status: "PAST_DUE",
+        planId: plan.id,
+        currentPeriodStart: periodStart,
+        currentPeriodEnd: periodEnd,
+        creditsIncludedThisPeriod: plan.monthlyCredits,
+        externalSubscriptionId: sub.id,
+        externalCustomerId: customerId ?? undefined,
+        cardLast4: card?.last4 ?? null,
+        cardBrand: card?.brand ?? null,
+        cardExpMonth: card?.exp_month ?? null,
+        cardExpYear: card?.exp_year ?? null,
+      },
+    })
   })
 }
 
@@ -370,6 +403,23 @@ async function handleSubscriptionUpdated(sub) {
       current_period_end: sub?.current_period_end,
     })
   }
+  // Garante 1 assinatura por usuário: se já houver outra sub registrada, cancela na Stripe.
+  try {
+    const existing = await prisma.userSubscription.findUnique({
+      where: { userId },
+      select: { externalSubscriptionId: true },
+    })
+    if (
+      existing?.externalSubscriptionId &&
+      existing.externalSubscriptionId !== sub.id
+    ) {
+      await stripe.subscriptions.cancel(existing.externalSubscriptionId)
+      console.log("[stripe] Cancelada assinatura anterior:", existing.externalSubscriptionId)
+    }
+  } catch (e) {
+    console.warn("[stripe] Falha ao cancelar assinatura anterior", e?.message || e)
+  }
+
   await prisma.userSubscription.upsert({
     where: { userId },
     create: {
