@@ -1,6 +1,12 @@
 import bcrypt from "bcrypt"
 import { prisma } from "../lib/prisma.js"
 
+function normalizeEmail(raw) {
+  return String(raw ?? "")
+    .trim()
+    .toLowerCase()
+}
+
 function isValidPassword(password) {
   // mínimo 8 caracteres, com minúscula, maiúscula, número e símbolo
   const regex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^\w\s]).{8,}$/
@@ -9,7 +15,8 @@ function isValidPassword(password) {
 
 export async function register(req, res) {
   try {
-    const { name, email, password } = req.body
+    const { name, password } = req.body
+    const email = normalizeEmail(req.body?.email)
 
     if (!name || !email || !password) {
       return res.status(400).json({ message: "Nome, email e senha são obrigatórios." })
@@ -63,9 +70,10 @@ export async function register(req, res) {
 
 export async function login(req, res) {
   try {
-    const { email, password } = req.body
+    const email = normalizeEmail(req.body?.email)
+    const password = req.body?.password
 
-    if (!email || !password) {
+    if (!email || typeof password !== "string" || !password) {
       return res.status(400).json({ message: "Email e senha são obrigatórios." })
     }
 
