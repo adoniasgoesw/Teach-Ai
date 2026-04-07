@@ -38,9 +38,9 @@ const plans = [
 
 async function main() {
     await prisma.billingConfig.upsert({
-        where: { id: "default" },
+        where: { id: 1 },
         create: {
-            id: "default",
+            id: 1,
             creditUnitCents: 10,
         },
         update: {

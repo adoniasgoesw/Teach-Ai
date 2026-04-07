@@ -1,4 +1,5 @@
 import { prisma } from "../lib/prisma.js"
+import { parsePositiveInt } from "../lib/parseId.js"
 
 /**
  * Cria um Source ligado a um curso.
@@ -21,8 +22,8 @@ export async function createSource({ tx = prisma, courseId, filename, text, titl
  */
 export async function listSourcesByCourse(req, res) {
   try {
-    const courseId = req.params.courseId != null ? String(req.params.courseId).trim() : ""
-    if (!courseId) {
+    const courseId = parsePositiveInt(req.params.courseId)
+    if (courseId == null) {
       return res.status(400).json({ message: "courseId inválido." })
     }
 

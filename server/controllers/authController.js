@@ -33,21 +33,11 @@ export async function register(req, res) {
 
     const hashedPassword = await bcrypt.hash(password, 10)
 
-    // Busca o maior id numérico atual e soma +1. Se não existir, começa em 1.
-    const rows =
-      (await prisma.$queryRaw`SELECT COALESCE(MAX(CAST(id AS INTEGER)), 0) AS "max" FROM "User" WHERE id ~ '^[0-9]+$'`) ??
-      []
-    const currentMax = Number(rows[0]?.max ?? 0)
-    const nextId = String(currentMax + 1)
-
     const user = await prisma.user.create({
       data: {
-        id: nextId,
         name,
         email,
         password: hashedPassword,
-        createdAt: new Date(),
-        updatedAt: new Date(),
         creditWallet: {
           create: { balance: 20 },
         },

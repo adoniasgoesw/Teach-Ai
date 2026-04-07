@@ -8,6 +8,7 @@ import {
 } from "../lib/creditPricing.js"
 import { getMp3DurationSeconds } from "../lib/mp3Duration.js"
 import { prisma } from "../lib/prisma.js"
+import { parsePositiveInt } from "../lib/parseId.js"
 import {
   consumeCreditsTx,
   getCreditBalance,
@@ -29,9 +30,8 @@ export async function postGoogleTts(req, res) {
       })
     }
 
-    const userId =
-      req.body?.userId != null ? String(req.body.userId).trim() : ""
-    if (!userId) {
+    const userId = parsePositiveInt(req.body?.userId)
+    if (userId == null) {
       return res.status(400).json({
         message: "userId é obrigatório para gerar áudio com créditos.",
       })

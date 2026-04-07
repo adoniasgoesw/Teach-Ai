@@ -10,11 +10,16 @@
  */
 import "dotenv/config"
 import { prisma } from "../lib/prisma.js"
+import { parsePositiveInt } from "../lib/parseId.js"
 
-const userId = String(process.env.USER_ID ?? "1").trim()
+const userId = parsePositiveInt(process.env.USER_ID ?? "1")
 const delta = Math.max(0, Math.floor(Number(process.env.DELTA ?? 20)))
 
 async function main() {
+  if (userId == null) {
+    console.error("[add-credits] USER_ID inválido (número inteiro > 0).")
+    process.exit(1)
+  }
   if (!delta) {
     console.error("[add-credits] DELTA deve ser > 0.")
     process.exit(1)

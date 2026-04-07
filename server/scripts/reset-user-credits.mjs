@@ -11,11 +11,16 @@
  */
 import "dotenv/config"
 import { prisma } from "../lib/prisma.js"
+import { parsePositiveInt } from "../lib/parseId.js"
 
-const userId = String(process.env.USER_ID ?? "1").trim()
+const userId = parsePositiveInt(process.env.USER_ID ?? "1")
 const balance = Math.max(0, Math.floor(Number(process.env.BALANCE ?? 20)))
 
 async function main() {
+  if (userId == null) {
+    console.error("[reset-credits] USER_ID inválido (número inteiro > 0).")
+    process.exit(1)
+  }
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { id: true, email: true },

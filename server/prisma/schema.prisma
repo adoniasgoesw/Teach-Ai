@@ -12,7 +12,7 @@ datasource db {
 
 /// Catálogo fixo de planos (Free, Pro, Plus, Ultra).
 model Plan {
-  id                 String   @id @default(cuid())
+  id                 Int      @id @default(autoincrement())
   slug               String   @unique
   name               String
   /// Créditos concedidos a cada renovação do ciclo
@@ -31,12 +31,12 @@ model Plan {
 
 /// Assinatura atual do usuário (uma ativa por usuário). Renovação = novo ciclo + grant de créditos.
 model UserSubscription {
-  id     String @id @default(cuid())
-  userId String @unique
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     Int @id @default(autoincrement())
+  userId Int @unique
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  planId String
-  plan   Plan   @relation(fields: [planId], references: [id], onDelete: Restrict)
+  planId Int
+  plan   Plan @relation(fields: [planId], references: [id], onDelete: Restrict)
 
   status SubscriptionStatus @default(ACTIVE)
 
@@ -70,7 +70,7 @@ model UserSubscription {
 
 /// Saldo atual de créditos (atualizado junto com cada CreditTransaction, em transação de app).
 model CreditWallet {
-  userId    String   @id
+  userId    Int      @id
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   balance   Int      @default(0)
   updatedAt DateTime @updatedAt
@@ -78,9 +78,9 @@ model CreditWallet {
 
 /// Ledger: toda movimentação (enviou PDF -2, renovou +20, upgrade de plano, etc.).
 model CreditTransaction {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     Int @id @default(autoincrement())
+  userId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   /// Positivo = entrada; negativo = consumo.
   amount       Int
@@ -91,7 +91,7 @@ model CreditTransaction {
   label    String?
   metadata Json?
 
-  invoiceId String?
+  invoiceId Int?
   invoice   Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
@@ -101,12 +101,12 @@ model CreditTransaction {
 
 /// Fatura (ex.: assinatura de plano).
 model Invoice {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     Int @id @default(autoincrement())
+  userId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  planId String?
-  plan   Plan?   @relation(fields: [planId], references: [id], onDelete: SetNull)
+  planId Int?
+  plan   Plan? @relation(fields: [planId], references: [id], onDelete: SetNull)
 
   amountCents Int
   currency    String         @default("BRL")
@@ -130,9 +130,9 @@ model Invoice {
   @@index([userId, createdAt(sort: Desc)])
 }
 
-/// Uma linha — referência de valor do crédito nos planos (centavos BRL). Id fixo "default".
+/// Uma linha — referência de valor do crédito nos planos (centavos BRL). Use id = 1 (seed).
 model BillingConfig {
-  id String @id @default("default")
+  id Int @id @default(autoincrement())
 
   /// Ex.: 10 = R$ 0,10 por crédito (referência comercial / relatórios)
   creditUnitCents Int @default(10)
@@ -187,14 +187,14 @@ enum SourceAiJobStatus {
 }
 
 model SourceAiJob {
-  id       String @id @default(cuid())
-  sourceId String
+  id       Int @id @default(autoincrement())
+  sourceId Int
   source   Source @relation(fields: [sourceId], references: [id], onDelete: Cascade)
 
   kind   SourceAiJobKind
   status SourceAiJobStatus @default(IN_PROGRESS)
 
-  userId String?
+  userId Int?
   error  String?
 
   startedAt  DateTime @default(now())
@@ -210,37 +210,37 @@ model SourceAiJob {
 // ---------------------------------------------------------------------------
 
 model User {
-  id        String   @id
+  id        Int      @id @default(autoincrement())
   name      String?
   email     String   @unique
   password  String
   createdAt DateTime @default(now())
-  updatedAt DateTime
+  updatedAt DateTime @updatedAt
 
   /// Customer id na Stripe (cus_…)
   stripeCustomerId String? @unique
 
   courses Course[]
 
-  subscription         UserSubscription?
-  creditWallet         CreditWallet?
+  subscription       UserSubscription?
+  creditWallet       CreditWallet?
   creditTransactions CreditTransaction[]
-  invoices             Invoice[]
+  invoices           Invoice[]
 }
 
 model Course {
-  id          String   @id @default(cuid())
-  name        String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  sources     Source[]
+  id        Int      @id @default(autoincrement())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sources   Source[]
 }
 
 model Source {
-  id         String       @id @default(cuid())
-  courseId   String
+  id         Int          @id @default(autoincrement())
+  courseId   Int
   course     Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
   filename   String?
   text       String?      @db.Text
@@ -256,8 +256,8 @@ model Source {
 
 /// Áudio TTS único (curso/fonte) em MP3; reutilizado enquanto o texto (hash) for o mesmo.
 model SourceAudio {
-  id        String   @id @default(cuid())
-  sourceId  String   @unique
+  id        Int      @id @default(autoincrement())
+  sourceId  Int      @unique
   source    Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
   data      Bytes
   mimeType  String   @default("audio/mpeg")
@@ -267,49 +267,49 @@ model SourceAudio {
 }
 
 model Lesson {
-  id          String  @id @default(cuid())
-  sourceId    String
-  source      Source  @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  id          Int      @id @default(autoincrement())
+  sourceId    Int
+  source      Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
   title       String
-  isSubtitle  Boolean @default(false)
+  isSubtitle  Boolean  @default(false)
   parentTitle String?
   order       Int?
-  content     String  @db.Text
+  content     String   @db.Text
   createdAt   DateTime @default(now())
 }
 
 /// Perguntas objetivas da fonte (PDF) inteira — geradas por IA, cache por sourceId.
 model Quiz {
-  id             String   @id @default(cuid())
-  sourceId       String
-  source         Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
-  question       String   @db.Text
-  alternatives   Json
-  correctIndex   Int
-  /// easy | medium | hard
-  difficulty     String?
-  order          Int?
-  createdAt      DateTime @default(now())
-
-  @@index([sourceId])
-}
-
-model Flashcard {
-  id           String   @id @default(cuid())
-  sourceId     String
+  id           Int      @id @default(autoincrement())
+  sourceId     Int
   source       Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
-  term         String   @db.Text
-  definition   String   @db.Text
+  question     String   @db.Text
+  alternatives Json
+  correctIndex Int
+  /// easy | medium | hard
+  difficulty   String?
   order        Int?
   createdAt    DateTime @default(now())
 
   @@index([sourceId])
 }
 
+model Flashcard {
+  id         Int      @id @default(autoincrement())
+  sourceId   Int
+  source     Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  term       String   @db.Text
+  definition String   @db.Text
+  order      Int?
+  createdAt  DateTime @default(now())
+
+  @@index([sourceId])
+}
+
 /// Uma anotação acadêmica consolidada por fonte (texto longo).
 model SourceNote {
-  id        String   @id @default(cuid())
-  sourceId  String   @unique
+  id        Int      @id @default(autoincrement())
+  sourceId  Int      @unique
   source    Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
   content   String   @db.Text
   createdAt DateTime @default(now())

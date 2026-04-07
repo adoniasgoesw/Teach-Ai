@@ -1,4 +1,5 @@
 import { prisma } from "./prisma.js"
+import { parsePositiveInt } from "./parseId.js"
 
 export class InsufficientCreditsError extends Error {
   constructor(message, { balance = 0, required = 0 } = {}) {
@@ -11,8 +12,8 @@ export class InsufficientCreditsError extends Error {
 }
 
 export async function getCreditBalance(userId) {
-  const id = userId != null ? String(userId).trim() : ""
-  if (!id) return 0
+  const id = parsePositiveInt(userId)
+  if (id == null) return 0
   const w = await prisma.creditWallet.findUnique({
     where: { userId: id },
     select: { balance: true },
@@ -21,7 +22,13 @@ export async function getCreditBalance(userId) {
 }
 
 export async function getOrCreateWalletTx(tx, userId) {
-  const id = String(userId).trim()
+  const id = parsePositiveInt(userId)
+  if (id == null) {
+    throw new InsufficientCreditsError(
+      "Identificação de usuário ausente; não é possível usar créditos.",
+      { balance: 0, required: 0 }
+    )
+  }
   return tx.creditWallet.upsert({
     where: { userId: id },
     create: { userId: id, balance: 0 },
@@ -34,9 +41,9 @@ export async function getOrCreateWalletTx(tx, userId) {
  * `amount` > 0 = quantidade a consumir.
  */
 export async function consumeCreditsTx(tx, { userId, amount, type, label, metadata }) {
-  const id = userId != null ? String(userId).trim() : ""
+  const id = parsePositiveInt(userId)
   const n = Math.floor(Number(amount))
-  if (!id) {
+  if (id == null) {
     throw new InsufficientCreditsError(
       "Identificação de usuário ausente; não é possível usar créditos.",
       { balance: 0, required: Math.max(0, n) }
