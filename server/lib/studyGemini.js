@@ -1,4 +1,4 @@
-import { ai } from "./gemini.js"
+import { getGeminiClient } from "./gemini.js"
 
 export async function callGeminiWithRetry(fn, retries = 3) {
   try {
@@ -42,7 +42,7 @@ export function parseJsonFromAi(raw) {
 
 export async function generateContent(prompt) {
   const responseUnified = await callGeminiWithRetry(() =>
-    ai.models.generateContent({
+    getGeminiClient().models.generateContent({
       model: "gemini-3-flash-preview",
       contents: prompt,
     })
