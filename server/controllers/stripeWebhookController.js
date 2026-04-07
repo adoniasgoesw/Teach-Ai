@@ -471,7 +471,10 @@ async function handleCheckoutSessionCompleted(session) {
       })
       await handleSubscriptionUpdated(sub)
     } catch (e) {
-      console.warn("[stripe] checkout.session.completed: sub retrieve falhou", e?.message || e)
+      console.warn(
+        "[stripe] checkout.session.completed: falha ao sincronizar subscription",
+        e?.message || e
+      )
     }
   }
 
