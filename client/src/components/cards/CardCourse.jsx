@@ -3,7 +3,17 @@ import { EllipsisVertical, Pencil, Trash } from "lucide-react"
 import { useState, useEffect, useRef } from "react"
 import { useNavigate } from "react-router-dom"
 
-export default function CardCourse({ name, description, icon, course }) {
+function formatDatePtShort(d) {
+    try {
+        const dt = new Date(d)
+        if (!Number.isFinite(dt.getTime())) return "—"
+        return dt.toLocaleDateString("pt-BR")
+    } catch {
+        return "—"
+    }
+}
+
+export default function CardCourse({ name, createdAt, sourcesCount, icon, course, onClick }) {
 
     const [showMenu, setShowMenu] = useState(false)
     const containerRef = useRef(null)
@@ -29,7 +39,17 @@ export default function CardCourse({ name, description, icon, course }) {
     return (
         <article
             className="bg-neutral-200 p-4 rounded-lg flex flex-col items-start justify-center gap-2 cursor-pointer"
-            onClick={() => navigate("/course", { state: { course } })}
+            onClick={
+                onClick
+                    ? onClick
+                    : () => {
+                        if (course?.id != null) {
+                            navigate(`/course/${course.id}`)
+                        } else {
+                            navigate("/course", { state: { course } })
+                        }
+                    }
+            }
         >
 
             <div ref={containerRef} className="relative flex w-full items-center justify-between">
@@ -59,8 +79,17 @@ export default function CardCourse({ name, description, icon, course }) {
                 }
             </div>
 
-                    <h3>{name}</h3>
-                    <p>{description}</p>
+                    <h3 className="font-medium text-neutral-900">{name}</h3>
+                    <p className="text-xs text-neutral-600">
+                        {formatDatePtShort(createdAt ?? course?.createdAt)} ·{" "}
+                        <span className="tabular-nums">
+                            {Number(sourcesCount ?? course?._count?.sources ?? 0)}
+                        </span>{" "}
+                        arquivo
+                        {Number(sourcesCount ?? course?._count?.sources ?? 0) === 1
+                            ? ""
+                            : "s"}
+                    </p>
         </article>
     )
 }

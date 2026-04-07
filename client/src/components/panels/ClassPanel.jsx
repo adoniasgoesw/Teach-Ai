@@ -4,11 +4,19 @@ import { ChevronRightIcon, FileUp, Plus } from "lucide-react"
 export default function ClassPanel({
     sources,
     hasSources,
+    sourcesLoading = false,
+    sourcesError = null,
     openSourceId,
     setOpenSourceId,
     selectedLesson,
     setSelectedLesson,
+    onSelectFile,
 }) {
+    const handleClickAddSource = () => {
+        const input = document.getElementById("course-file-input")
+        if (input) input.click()
+    }
+
     return (
         <div className="bg-white w-1/3  rounded-2xl border-2 border-white/80">
             <div className="border-b border-gray-200 p-4">
@@ -17,12 +25,37 @@ export default function ClassPanel({
 
             <div className="p-4 flex flex-col gap-2 w-full  h-full">
                 <div className="flex items-center justify-center gap-2 w-full ">
-                    <Button text={"Adicionar uma fonte"} icon={<Plus />} variant="outline" size="sm"/>
+                    <Button
+                        text={"Adicionar uma fonte"}
+                        icon={<Plus />}
+                        variant="outline"
+                        size="sm"
+                        onClick={handleClickAddSource}
+                    />
+                    {/* input de arquivo oculto, compartilhado com o ContentPanel */}
+                    <input
+                        id="course-file-input"
+                        type="file"
+                        accept="application/pdf"
+                        className="hidden"
+                        onChange={onSelectFile}
+                    />
                 </div>
 
-                {!hasSources && (
+                {sourcesLoading && (
+                    <p className="text-sm text-gray-500 text-center mt-4">
+                        Carregando fontes…
+                    </p>
+                )}
+
+                {sourcesError && !sourcesLoading && (
+                    <p className="text-sm text-red-600 text-center mt-4">
+                        {sourcesError}
+                    </p>
+                )}
+
+                {!sourcesLoading && !hasSources && !sourcesError && (
                     <div className="flex flex-col items-center justify-center gap-2 text-center mt-4">
-                        
                         <p>As fontes serão exibidas aqui</p>
                     </div>
                 )}
@@ -43,7 +76,9 @@ export default function ClassPanel({
                                             )
                                         }
                                     >
-                                        <p className="text-sm text-gray-900">{source.title}</p>
+                                        <p className="text-sm text-gray-900">
+                                            {source.title ?? source.filename ?? "Fonte"}
+                                        </p>
                                         <ChevronRightIcon
                                             className={`h-4 w-4 transition-transform text-gray-900 ${
                                                 isOpen ? "rotate-90" : ""

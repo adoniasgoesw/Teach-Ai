@@ -27,6 +27,13 @@ export default function FormRegister({ onCick }) {
 
             const user = data.user || data
 
+            // persiste sessão no navegador
+            try {
+                window.localStorage.setItem("teachai:user", JSON.stringify(user))
+            } catch (e) {
+                console.warn("Não foi possível salvar o usuário no localStorage.", e)
+            }
+
             setName("")
             setEmail("")
             setUserPassword("")
