@@ -1,0 +1,6 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# This frontend does not use Stripe Elements; it redirects to Stripe Payment Links.
+# Keep ONLY VITE_* variables required by the client (e.g. VITE_API_URL).
