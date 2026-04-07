@@ -586,6 +586,11 @@ export async function postStripeWebhook(req, res) {
       case "invoice.paid":
         await handleInvoicePaid(event.data.object)
         break
+      case "invoice.payment_succeeded":
+        // Alguns setups enviam `invoice.payment_succeeded` (em vez de `invoice.paid`).
+        // Reusa a mesma lógica de conciliação/grant.
+        await handleInvoicePaid(event.data.object)
+        break
       case "invoice_payment.paid":
         await handleInvoicePaymentPaid(event.data.object)
         break
