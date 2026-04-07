@@ -373,6 +373,7 @@ async function handleSubscriptionDeleted(sub) {
 }
 
 async function handleCheckoutSessionCompleted(session) {
+  const stripe = getStripe()
   const customerId =
     typeof session.customer === "string" ? session.customer : session.customer?.id
   const email = session.customer_details?.email?.trim() || ""
@@ -388,6 +389,34 @@ async function handleCheckoutSessionCompleted(session) {
       where: { id: user.id },
       data: { stripeCustomerId: customerId },
     })
+  }
+
+  // Em Payment Links, às vezes o evento de invoice chega depois.
+  // Para refletir o plano imediatamente, tenta processar a subscription/invoice referenciadas pela sessão.
+  const subId =
+    typeof session.subscription === "string"
+      ? session.subscription
+      : session.subscription?.id
+  if (subId) {
+    try {
+      const sub = await stripe.subscriptions.retrieve(subId, {
+        expand: ["default_payment_method"],
+      })
+      await handleSubscriptionUpdated(sub)
+    } catch (e) {
+      console.warn("[stripe] checkout.session.completed: sub retrieve falhou", e?.message || e)
+    }
+  }
+
+  const invId =
+    typeof session.invoice === "string" ? session.invoice : session.invoice?.id
+  if (invId) {
+    try {
+      const inv = await stripe.invoices.retrieve(invId)
+      if (inv?.status === "paid") await handleInvoicePaid(inv)
+    } catch (e) {
+      console.warn("[stripe] checkout.session.completed: invoice retrieve falhou", e?.message || e)
+    }
   }
 }
 
