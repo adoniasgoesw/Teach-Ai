@@ -391,6 +391,18 @@ async function handleCheckoutSessionCompleted(session) {
   }
 }
 
+async function handleInvoicePaymentPaid(invoicePayment) {
+  const stripe = getStripe()
+  const invoiceId =
+    typeof invoicePayment.invoice === "string"
+      ? invoicePayment.invoice
+      : invoicePayment.invoice?.id
+  if (!invoiceId) return
+  const inv = await stripe.invoices.retrieve(invoiceId)
+  // Reusa a mesma lógica do invoice.paid
+  await handleInvoicePaid(inv)
+}
+
 /**
  * POST /api/billing/webhook — body RAW (Buffer), não JSON.
  */
@@ -424,6 +436,9 @@ export async function postStripeWebhook(req, res) {
         break
       case "invoice.paid":
         await handleInvoicePaid(event.data.object)
+        break
+      case "invoice_payment.paid":
+        await handleInvoicePaymentPaid(event.data.object)
         break
       case "invoice.payment_failed":
         await handleInvoicePaymentFailed(event.data.object)
