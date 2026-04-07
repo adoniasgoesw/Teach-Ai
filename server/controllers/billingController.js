@@ -170,8 +170,8 @@ export async function postCreateSubscription(req, res) {
  * POST /api/billing/cancel-subscription
  * Body: { userId }
  *
- * Cancela a assinatura Stripe (se existir).
- * IMPORTANTE: o banco é atualizado via webhook (customer.subscription.deleted).
+ * Agenda cancelamento ao fim do período de cobrança (Stripe `cancel_at_period_end`).
+ * O usuário mantém o plano até `currentPeriodEnd`; depois o webhook `customer.subscription.deleted` define Free.
  */
 export async function postCancelSubscription(req, res) {
   try {
@@ -193,33 +193,151 @@ export async function postCancelSubscription(req, res) {
     })
 
     if (!subRow) {
-      // Nada para cancelar (ainda não existe assinatura local).
-      return res.status(200).json({ ok: true, canceled: false })
+      return res.status(200).json({ ok: true, scheduled: false })
     }
 
     if (!subRow.externalSubscriptionId) {
-      // Plano free/local sem assinatura Stripe.
-      return res.status(200).json({ ok: true, canceled: false })
+      return res.status(200).json({ ok: true, scheduled: false })
     }
 
     const stripe = getStripe()
+    let stripeSub
     try {
-      await stripe.subscriptions.cancel(subRow.externalSubscriptionId)
+      stripeSub = await stripe.subscriptions.retrieve(subRow.externalSubscriptionId)
     } catch (e) {
       console.warn(
-        "[billing] cancel-subscription: stripe cancel failed",
+        "[billing] cancel-subscription: retrieve failed",
         e?.message || e
       )
       return res.status(502).json({
-        message: "Não foi possível cancelar na Stripe. Tente novamente.",
+        message: "Não foi possível ler a assinatura na Stripe.",
       })
     }
 
-    // Banco será atualizado pelo webhook customer.subscription.deleted.
-    return res.status(202).json({ ok: true, canceled: true })
+    if (
+      stripeSub.status === "canceled" ||
+      stripeSub.status === "incomplete_expired"
+    ) {
+      return res.status(400).json({
+        message: "Esta assinatura já está encerrada na Stripe.",
+      })
+    }
+
+    if (stripeSub.cancel_at_period_end) {
+      await prisma.userSubscription.update({
+        where: { userId },
+        data: { cancelAtPeriodEnd: true },
+      })
+      return res.status(200).json({ ok: true, scheduled: true })
+    }
+
+    try {
+      await stripe.subscriptions.update(subRow.externalSubscriptionId, {
+        cancel_at_period_end: true,
+      })
+    } catch (e) {
+      console.warn(
+        "[billing] cancel-subscription: stripe update failed",
+        e?.message || e
+      )
+      return res.status(502).json({
+        message:
+          "Não foi possível agendar o cancelamento na Stripe. Tente novamente.",
+      })
+    }
+
+    await prisma.userSubscription.update({
+      where: { userId },
+      data: { cancelAtPeriodEnd: true },
+    })
+
+    return res.status(200).json({ ok: true, scheduled: true })
   } catch (err) {
     console.error("[billing] cancel-subscription:", err)
     return res.status(500).json({ message: "Erro ao cancelar assinatura." })
+  }
+}
+
+/**
+ * POST /api/billing/resume-subscription
+ * Body: { userId }
+ *
+ * Remove o cancelamento agendado (`cancel_at_period_end: false`).
+ */
+export async function postResumeSubscription(req, res) {
+  try {
+    const userId =
+      req.body?.userId != null ? String(req.body.userId).trim() : ""
+    if (!userId) {
+      return res.status(400).json({ message: "userId é obrigatório." })
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    })
+    if (!user) return res.status(404).json({ message: "Usuário não encontrado." })
+
+    const subRow = await prisma.userSubscription.findUnique({
+      where: { userId },
+      select: { externalSubscriptionId: true, cancelAtPeriodEnd: true },
+    })
+
+    if (!subRow?.externalSubscriptionId) {
+      return res.status(200).json({ ok: true, resumed: false })
+    }
+
+    const stripe = getStripe()
+    let stripeSub
+    try {
+      stripeSub = await stripe.subscriptions.retrieve(subRow.externalSubscriptionId)
+    } catch (e) {
+      console.warn(
+        "[billing] resume-subscription: retrieve failed",
+        e?.message || e
+      )
+      return res.status(502).json({
+        message: "Não foi possível ler a assinatura na Stripe.",
+      })
+    }
+
+    if (stripeSub.status === "canceled" || stripeSub.status === "incomplete_expired") {
+      return res.status(400).json({
+        message: "Assinatura já encerrada; faça uma nova assinatura pelo checkout.",
+      })
+    }
+
+    if (!stripeSub.cancel_at_period_end) {
+      await prisma.userSubscription.update({
+        where: { userId },
+        data: { cancelAtPeriodEnd: false },
+      })
+      return res.status(200).json({ ok: true, resumed: false })
+    }
+
+    try {
+      await stripe.subscriptions.update(subRow.externalSubscriptionId, {
+        cancel_at_period_end: false,
+      })
+    } catch (e) {
+      console.warn(
+        "[billing] resume-subscription: stripe update failed",
+        e?.message || e
+      )
+      return res.status(502).json({
+        message: "Não foi possível reativar a assinatura na Stripe.",
+      })
+    }
+
+    await prisma.userSubscription.update({
+      where: { userId },
+      data: { cancelAtPeriodEnd: false },
+    })
+
+    return res.status(200).json({ ok: true, resumed: true })
+  } catch (err) {
+    console.error("[billing] resume-subscription:", err)
+    return res.status(500).json({ message: "Erro ao reativar assinatura." })
   }
 }
 

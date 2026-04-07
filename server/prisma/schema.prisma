@@ -60,6 +60,10 @@ model UserSubscription {
   cardExpYear  Int?
 
   canceledAt DateTime?
+
+  /// Stripe: cancelamento agendado para o fim do período (usuário mantém plano até currentPeriodEnd).
+  cancelAtPeriodEnd Boolean @default(false)
+
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 }

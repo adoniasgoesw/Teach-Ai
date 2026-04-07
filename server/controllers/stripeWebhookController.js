@@ -184,11 +184,12 @@ async function handleInvoicePaid(invoice) {
 
   const billingReason = invoice.billing_reason
   const amountPaid = invoice.amount_paid ?? 0
+  const isPaid = invoice.status === "paid" || invoice.paid === true
   const grantPeriod =
+    isPaid &&
     (billingReason === "subscription_create" ||
       billingReason === "subscription_cycle" ||
-      billingReason === "subscription_update") &&
-    amountPaid > 0
+      billingReason === "subscription_update")
 
   const card = await extractPmCardFromSub(sub, stripe)
   const customerId =
@@ -265,6 +266,7 @@ async function handleInvoicePaid(invoice) {
       })
     }
 
+    const cancelAtPeriodEnd = Boolean(sub.cancel_at_period_end)
     await tx.userSubscription.upsert({
       where: { userId },
       create: {
@@ -278,6 +280,7 @@ async function handleInvoicePaid(invoice) {
         externalCustomerId: customerId ?? undefined,
         lastPaymentAmountCents: amountPaid,
         lastPaymentAt: new Date(),
+        cancelAtPeriodEnd,
         cardLast4: card?.last4 ?? null,
         cardBrand: card?.brand ?? null,
         cardExpMonth: card?.exp_month ?? null,
@@ -293,6 +296,7 @@ async function handleInvoicePaid(invoice) {
         externalCustomerId: customerId ?? undefined,
         lastPaymentAmountCents: amountPaid,
         lastPaymentAt: new Date(),
+        cancelAtPeriodEnd,
         cardLast4: card?.last4 ?? null,
         cardBrand: card?.brand ?? null,
         cardExpMonth: card?.exp_month ?? null,
@@ -359,6 +363,7 @@ async function handleInvoicePaymentFailed(invoice) {
       },
     })
 
+    const cancelAtPeriodEndFailed = Boolean(sub.cancel_at_period_end)
     await tx.userSubscription.upsert({
       where: { userId },
       create: {
@@ -370,6 +375,7 @@ async function handleInvoicePaymentFailed(invoice) {
         creditsIncludedThisPeriod: plan.monthlyCredits,
         externalSubscriptionId: sub.id,
         externalCustomerId: customerId ?? undefined,
+        cancelAtPeriodEnd: cancelAtPeriodEndFailed,
         cardLast4: card?.last4 ?? null,
         cardBrand: card?.brand ?? null,
         cardExpMonth: card?.exp_month ?? null,
@@ -383,6 +389,7 @@ async function handleInvoicePaymentFailed(invoice) {
         creditsIncludedThisPeriod: plan.monthlyCredits,
         externalSubscriptionId: sub.id,
         externalCustomerId: customerId ?? undefined,
+        cancelAtPeriodEnd: cancelAtPeriodEndFailed,
         cardLast4: card?.last4 ?? null,
         cardBrand: card?.brand ?? null,
         cardExpMonth: card?.exp_month ?? null,
@@ -432,6 +439,7 @@ async function handleSubscriptionUpdated(sub) {
     console.warn("[stripe] Falha ao cancelar assinatura anterior", e?.message || e)
   }
 
+  const cancelAtPeriodEnd = Boolean(sub.cancel_at_period_end)
   await prisma.userSubscription.upsert({
     where: { userId },
     create: {
@@ -443,6 +451,7 @@ async function handleSubscriptionUpdated(sub) {
       creditsIncludedThisPeriod: plan.monthlyCredits,
       externalSubscriptionId: sub.id,
       externalCustomerId: customerId ?? undefined,
+      cancelAtPeriodEnd,
       cardLast4: card?.last4 ?? null,
       cardBrand: card?.brand ?? null,
       cardExpMonth: card?.exp_month ?? null,
@@ -456,6 +465,7 @@ async function handleSubscriptionUpdated(sub) {
       creditsIncludedThisPeriod: plan.monthlyCredits,
       externalSubscriptionId: sub.id,
       externalCustomerId: customerId ?? undefined,
+      cancelAtPeriodEnd,
       cardLast4: card?.last4 ?? null,
       cardBrand: card?.brand ?? null,
       cardExpMonth: card?.exp_month ?? null,
@@ -480,6 +490,7 @@ async function handleSubscriptionDeleted(sub) {
       externalSubscriptionId: null,
       externalCustomerId: null,
       canceledAt: now,
+      cancelAtPeriodEnd: false,
       creditsIncludedThisPeriod: free.monthlyCredits,
       currentPeriodStart: now,
       currentPeriodEnd: addOneCalendarMonth(now),
@@ -490,6 +501,7 @@ async function handleSubscriptionDeleted(sub) {
       externalSubscriptionId: null,
       externalCustomerId: null,
       canceledAt: now,
+      cancelAtPeriodEnd: false,
       creditsIncludedThisPeriod: free.monthlyCredits,
       currentPeriodStart: now,
       currentPeriodEnd: addOneCalendarMonth(now),

@@ -1,7 +1,11 @@
 import { useEffect, useState } from "react"
 import { useOutletContext } from "react-router-dom"
 import { useBillingData } from "../../hooks/useBillingData"
-import { cancelStripeSubscription, getBillingInvoices } from "../../services/api"
+import {
+  cancelStripeSubscription,
+  resumeStripeSubscription,
+  getBillingInvoices,
+} from "../../services/api"
 import { formatBrlFromCents, formatDatePt } from "../../lib/creditUi"
 
 const STATUS_LABEL = {
@@ -23,7 +27,9 @@ const INVOICE_STATUS_LABEL = {
 export default function BillingPage() {
     const { user } = useOutletContext()
     const userId = user?.id != null ? String(user.id).trim() : ""
-    const { summary, loading, error } = useBillingData(userId)
+    const { summary, loading, error, reload: reloadBilling } = useBillingData(
+        userId
+    )
     const [invoices, setInvoices] = useState([])
     const [invoicesLoading, setInvoicesLoading] = useState(true)
     const [invoicesError, setInvoicesError] = useState(null)
@@ -32,6 +38,7 @@ export default function BillingPage() {
     const plan = sub?.plan
     const priceCents = plan?.priceMonthlyCents ?? 0
     const canCancel = Boolean(sub?.externalSubscriptionId)
+    const cancelAtPeriodEnd = Boolean(sub?.cancelAtPeriodEnd)
     const [cancelLoading, setCancelLoading] = useState(false)
 
     useEffect(() => {
@@ -120,7 +127,11 @@ export default function BillingPage() {
                             </p>
                         </div>
                         <div>
-                            <p className="text-neutral-500">Fim do período</p>
+                            <p className="text-neutral-500">
+                                {cancelAtPeriodEnd
+                                    ? "Assinatura expira em"
+                                    : "Próxima renovação"}
+                            </p>
                             <p className="font-medium text-neutral-800 mt-0.5">
                                 {sub
                                     ? formatDatePt(sub.currentPeriodEnd)
@@ -149,20 +160,52 @@ export default function BillingPage() {
                         Adicionar pagamento (em breve)
                     </button>
 
-                    {canCancel && (
+                    {canCancel && cancelAtPeriodEnd && (
                         <button
                             type="button"
                             disabled={cancelLoading}
                             onClick={() => {
                                 const ok = window.confirm(
-                                    "Cancelar assinatura?\n\n- A cobrança na Stripe será cancelada.\n- Seu plano será atualizado para Free pelo webhook (pode levar alguns segundos).\n- Seus créditos atuais serão mantidos."
+                                    "Manter assinatura?\n\nA renovação automática será ligada novamente."
+                                )
+                                if (!ok) return
+                                setCancelLoading(true)
+                                resumeStripeSubscription(userId)
+                                    .then(() => {
+                                        void reloadBilling()
+                                        window.alert(
+                                            "Renovação automática reativada."
+                                        )
+                                    })
+                                    .catch((e) => {
+                                        const msg =
+                                            e?.response?.data?.message ||
+                                            e?.message ||
+                                            "Erro ao reativar assinatura."
+                                        window.alert(msg)
+                                    })
+                                    .finally(() => setCancelLoading(false))
+                            }}
+                            className="rounded-lg border border-emerald-200 bg-white px-4 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-50 disabled:opacity-50"
+                        >
+                            {cancelLoading ? "Salvando…" : "Manter assinatura"}
+                        </button>
+                    )}
+                    {canCancel && !cancelAtPeriodEnd && (
+                        <button
+                            type="button"
+                            disabled={cancelLoading}
+                            onClick={() => {
+                                const ok = window.confirm(
+                                    "Cancelar ao fim do período?\n\n- Você mantém o plano até a data acima.\n- Depois disso, volta para Free (créditos atuais permanecem)."
                                 )
                                 if (!ok) return
                                 setCancelLoading(true)
                                 cancelStripeSubscription(userId)
                                     .then(() => {
+                                        void reloadBilling()
                                         window.alert(
-                                            "Cancelamento solicitado. Aguarde alguns segundos e atualize a página."
+                                            "Cancelamento agendado para o fim do período."
                                         )
                                     })
                                     .catch((e) => {

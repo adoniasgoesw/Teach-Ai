@@ -152,6 +152,7 @@ export async function getAccountSummary(req, res) {
             externalCustomerId: subscription.externalCustomerId,
             externalSubscriptionId: subscription.externalSubscriptionId,
             canceledAt: subscription.canceledAt,
+            cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
             cardLast4: subscription.cardLast4,
             cardBrand: subscription.cardBrand,
             cardExpMonth: subscription.cardExpMonth,

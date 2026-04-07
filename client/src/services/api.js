@@ -95,8 +95,7 @@ export async function createStripeSubscription(userId, planId) {
 }
 
 /**
- * Cancela assinatura Stripe e troca plano local para Free.
- * Retorno: { ok: true, planSlug: "free" }
+ * Agenda cancelamento ao fim do período (`cancel_at_period_end` na Stripe).
  */
 export async function cancelStripeSubscription(userId) {
   try {
@@ -106,6 +105,18 @@ export async function cancelStripeSubscription(userId) {
     return res.data
   } catch (err) {
     await throwParsedClientError(err, "Cancelamento")
+  }
+}
+
+/** Remove o cancelamento agendado (reativa renovação automática). */
+export async function resumeStripeSubscription(userId) {
+  try {
+    const res = await api.post("/billing/resume-subscription", {
+      userId: String(userId),
+    })
+    return res.data
+  } catch (err) {
+    await throwParsedClientError(err, "Assinatura")
   }
 }
 
