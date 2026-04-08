@@ -1,11 +1,13 @@
 import { prisma } from "../lib/prisma.js"
+import { parsePositiveInt } from "../lib/parseId.js"
 
 export async function createCourse(req, res) {
   try {
-    const { name, userId } = req.body
+    const { name, userId: userIdRaw } = req.body
 
-    if (!userId) {
-      return res.status(400).json({ message: "O ID do usuário é obrigatório." })
+    const userId = parsePositiveInt(userIdRaw)
+    if (userId == null) {
+      return res.status(400).json({ message: "O ID do usuário é obrigatório (número)." })
     }
 
     if (!name) {
@@ -21,16 +23,8 @@ export async function createCourse(req, res) {
       return res.status(404).json({ message: "Usuário não encontrado." })
     }
 
-    // Busca o maior id numérico atual da tabela de cursos e soma +1. Se não existir, começa em 1.
-    const rows =
-      (await prisma.$queryRaw`SELECT COALESCE(MAX(CAST(id AS INTEGER)), 0) AS "max" FROM "Course" WHERE id ~ '^[0-9]+$'`) ??
-      []
-    const currentMax = Number(rows[0]?.max ?? 0)
-    const nextId = String(currentMax + 1)
-
     const course = await prisma.course.create({
       data: {
-        id: nextId,
         name,
         userId: user.id,
       },
@@ -55,14 +49,13 @@ export async function createCourse(req, res) {
 
 export async function listCourses(req, res) {
   try {
-    const { userId } = req.query
-
-    if (!userId) {
-      return res.status(400).json({ message: "O ID do usuário é obrigatório." })
+    const userId = parsePositiveInt(req.query?.userId)
+    if (userId == null) {
+      return res.status(400).json({ message: "O ID do usuário é obrigatório (número)." })
     }
 
     const user = await prisma.user.findUnique({
-      where: { id: String(userId) },
+      where: { id: userId },
       select: { id: true },
     })
 

@@ -1,4 +1,5 @@
 import { prisma } from "../lib/prisma.js"
+import { parsePositiveInt } from "../lib/parseId.js"
 import { getStripe } from "../lib/stripeServer.js"
 import {
   planSlugFromStripePriceId,
@@ -15,14 +16,12 @@ import { addOneCalendarMonth } from "../lib/subscriptionCredits.js"
  */
 export async function postCreateSubscription(req, res) {
   try {
-    const userId =
-      req.body?.userId != null ? String(req.body.userId).trim() : ""
-    const planId =
-      req.body?.planId != null ? String(req.body.planId).trim() : ""
-    if (!userId || !planId) {
+    const userId = parsePositiveInt(req.body?.userId)
+    const planId = parsePositiveInt(req.body?.planId)
+    if (userId == null || planId == null) {
       return res
         .status(400)
-        .json({ message: "userId e planId são obrigatórios." })
+        .json({ message: "userId e planId são obrigatórios (números)." })
     }
 
     const plan = await prisma.plan.findFirst({
@@ -53,7 +52,7 @@ export async function postCreateSubscription(req, res) {
       const customer = await stripe.customers.create({
         email: user.email,
         name: user.name || undefined,
-        metadata: { appUserId: userId },
+        metadata: { appUserId: String(user.id) },
       })
       customerId = customer.id
       await prisma.user.update({
@@ -80,7 +79,7 @@ export async function postCreateSubscription(req, res) {
       include: { plan: true },
     })
 
-    const meta = { appUserId: userId, appPlanId: plan.id }
+    const meta = { appUserId: String(user.id), appPlanId: String(plan.id) }
 
     if (
       subRow?.externalSubscriptionId &&
@@ -175,10 +174,9 @@ export async function postCreateSubscription(req, res) {
  */
 export async function postCancelSubscription(req, res) {
   try {
-    const userId =
-      req.body?.userId != null ? String(req.body.userId).trim() : ""
-    if (!userId) {
-      return res.status(400).json({ message: "userId é obrigatório." })
+    const userId = parsePositiveInt(req.body?.userId)
+    if (userId == null) {
+      return res.status(400).json({ message: "userId é obrigatório (número)." })
     }
 
     const user = await prisma.user.findUnique({
@@ -266,10 +264,9 @@ export async function postCancelSubscription(req, res) {
  */
 export async function postResumeSubscription(req, res) {
   try {
-    const userId =
-      req.body?.userId != null ? String(req.body.userId).trim() : ""
-    if (!userId) {
-      return res.status(400).json({ message: "userId é obrigatório." })
+    const userId = parsePositiveInt(req.body?.userId)
+    if (userId == null) {
+      return res.status(400).json({ message: "userId é obrigatório (número)." })
     }
 
     const user = await prisma.user.findUnique({
@@ -347,10 +344,9 @@ export async function postResumeSubscription(req, res) {
  */
 export async function getBillingInvoices(req, res) {
   try {
-    const userId =
-      req.query?.userId != null ? String(req.query.userId).trim() : ""
-    if (!userId) {
-      return res.status(400).json({ message: "userId é obrigatório." })
+    const userId = parsePositiveInt(req.query?.userId)
+    if (userId == null) {
+      return res.status(400).json({ message: "userId é obrigatório (número)." })
     }
 
     const takeRaw = Number(req.query?.take)

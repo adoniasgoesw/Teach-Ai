@@ -1,5 +1,5 @@
 /**
- * Garante usuário id "1" com plano Free, assinatura ativa e 20 créditos na carteira.
+ * Garante usuário de seed (email fixo) com plano Free, assinatura ativa e 20 créditos na carteira.
  * Pré-requisito: `npm run seed:credits` (planos no banco).
  *
  * Uso:
@@ -12,7 +12,6 @@ import "dotenv/config"
 import bcrypt from "bcrypt"
 import { prisma } from "../lib/prisma.js"
 
-const USER_ID = "1"
 const SEED_EMAIL = "user1@teachai.seed"
 
 async function main() {
@@ -32,21 +31,19 @@ async function main() {
 
   const passwordHash = await bcrypt.hash("TeachAi2026!Test", 10)
 
-  await prisma.user.upsert({
-    where: { id: USER_ID },
+  const user = await prisma.user.upsert({
+    where: { email: SEED_EMAIL },
     create: {
-      id: USER_ID,
       email: SEED_EMAIL,
       name: "Usuário Teste 1",
       password: passwordHash,
-      createdAt: now,
-      updatedAt: now,
     },
     update: {
       name: "Usuário Teste 1",
-      updatedAt: now,
     },
   })
+
+  const USER_ID = user.id
 
   if (process.env.FORCE_USER1_RESET === "1") {
     await prisma.creditTransaction.deleteMany({ where: { userId: USER_ID } })

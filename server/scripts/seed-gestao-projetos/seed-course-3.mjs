@@ -9,19 +9,21 @@
  */
 import "dotenv/config"
 import { prisma } from "../../lib/prisma.js"
+import { parsePositiveInt } from "../../lib/parseId.js"
 import { buildLessonRowsFromAi } from "../../controllers/lessonController.js"
 import { titles } from "./titles.mjs"
 import { lessons } from "./lessons.mjs"
 
-const COURSE_ID = "3"
+const COURSE_ID = 3
 const SOURCE_FILENAME = "projetos"
 const COURSE_NAME = "Gestão de projetos"
 
 async function main() {
-  const userIdEnv = process.env.SEED_USER_ID?.trim()
-  const user = userIdEnv
-    ? await prisma.user.findUnique({ where: { id: userIdEnv } })
-    : await prisma.user.findFirst()
+  const userIdEnv = parsePositiveInt(process.env.SEED_USER_ID)
+  const user =
+    userIdEnv != null
+      ? await prisma.user.findUnique({ where: { id: userIdEnv } })
+      : await prisma.user.findFirst()
 
   if (!user) {
     console.error(
@@ -37,7 +39,6 @@ async function main() {
       data: {
         id: COURSE_ID,
         name: COURSE_NAME,
-        studyField: "administracao",
         userId: user.id,
       },
     })

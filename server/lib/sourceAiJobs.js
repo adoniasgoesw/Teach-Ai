@@ -1,4 +1,5 @@
 import { prisma } from "./prisma.js"
+import { parsePositiveInt } from "./parseId.js"
 
 export const AI_JOB_KIND = {
   QUIZ: "QUIZ",
@@ -11,8 +12,10 @@ export const AI_JOB_KIND = {
  * Retorna job (ou null).
  */
 export async function getAiJob(sourceId, kind) {
+  const sid = parsePositiveInt(sourceId)
+  if (sid == null) return null
   return prisma.sourceAiJob.findUnique({
-    where: { sourceId_kind: { sourceId, kind } },
+    where: { sourceId_kind: { sourceId: sid, kind } },
   })
 }
 
@@ -24,26 +27,29 @@ export async function getAiJob(sourceId, kind) {
  * - Se existir COMPLETED, retorna { started: false, status: 'COMPLETED' }.
  */
 export async function startAiJob(sourceId, kind, userId) {
+  const sid = parsePositiveInt(sourceId)
+  if (sid == null) throw new Error("startAiJob: sourceId inválido.")
+  const uid = userId == null ? null : parsePositiveInt(userId)
   try {
     const job = await prisma.sourceAiJob.create({
       data: {
-        sourceId,
+        sourceId: sid,
         kind,
         status: "IN_PROGRESS",
-        userId: userId ? String(userId).trim() : null,
+        userId: uid,
       },
     })
     return { started: true, job }
   } catch (e) {
     if (e?.code !== "P2002") throw e
     const existing = await prisma.sourceAiJob.findUnique({
-      where: { sourceId_kind: { sourceId, kind } },
+      where: { sourceId_kind: { sourceId: sid, kind } },
     })
     if (!existing) return { started: false, status: "IN_PROGRESS", job: null }
     if (existing.status === "FAILED") {
       const reopened = await prisma.sourceAiJob.update({
-        where: { sourceId_kind: { sourceId, kind } },
-        data: { status: "IN_PROGRESS", error: null, userId: userId ?? null, finishedAt: null },
+        where: { sourceId_kind: { sourceId: sid, kind } },
+        data: { status: "IN_PROGRESS", error: null, userId: uid, finishedAt: null },
       })
       return { started: true, job: reopened }
     }
@@ -52,9 +58,11 @@ export async function startAiJob(sourceId, kind, userId) {
 }
 
 export async function completeAiJob(sourceId, kind) {
+  const sid = parsePositiveInt(sourceId)
+  if (sid == null) return null
   try {
     return await prisma.sourceAiJob.update({
-      where: { sourceId_kind: { sourceId, kind } },
+      where: { sourceId_kind: { sourceId: sid, kind } },
       data: { status: "COMPLETED", finishedAt: new Date(), error: null },
     })
   } catch (e) {
@@ -64,10 +72,12 @@ export async function completeAiJob(sourceId, kind) {
 }
 
 export async function failAiJob(sourceId, kind, error) {
+  const sid = parsePositiveInt(sourceId)
+  if (sid == null) return null
   const msg = String(error?.message || error || "").slice(0, 500) || "Erro"
   try {
     return await prisma.sourceAiJob.update({
-      where: { sourceId_kind: { sourceId, kind } },
+      where: { sourceId_kind: { sourceId: sid, kind } },
       data: { status: "FAILED", finishedAt: new Date(), error: msg },
     })
   } catch (e) {

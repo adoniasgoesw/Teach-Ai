@@ -8,6 +8,7 @@ import {
 } from "../lib/creditPricing.js"
 import { getMp3DurationSeconds } from "../lib/mp3Duration.js"
 import { prisma } from "../lib/prisma.js"
+import { parsePositiveInt } from "../lib/parseId.js"
 import {
   consumeCreditsTx,
   getCreditBalance,
@@ -29,9 +30,8 @@ export async function postGoogleTts(req, res) {
       })
     }
 
-    const userId =
-      req.body?.userId != null ? String(req.body.userId).trim() : ""
-    if (!userId) {
+    const userId = parsePositiveInt(req.body?.userId)
+    if (userId == null) {
       return res.status(400).json({
         message: "userId é obrigatório para gerar áudio com créditos.",
       })
@@ -109,7 +109,9 @@ export async function postGoogleTts(req, res) {
     const hint =
       code === 7 || code === 16
         ? " Verifique GOOGLE_APPLICATION_CREDENTIALS ou GOOGLE_TTS_CREDENTIALS_JSON e se a API Text-to-Speech está ativa no projeto."
-        : ""
+        : code === 13
+          ? " Erro interno do Google TTS (voz ou SSML). Tente GOOGLE_TTS_VOICE_NAME=pt-BR-Neural2-A ou remova vozes Chirp3."
+          : ""
     return res.status(500).json({
       message: `Erro ao gerar áudio (Google Cloud TTS).${hint}`,
       detail: String(err?.message || err).slice(0, 500),

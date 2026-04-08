@@ -2,10 +2,19 @@
  * Síntese Google Cloud TTS → Buffer MP3 (texto longo em fatias).
  * Usado por POST /tts/google e pelo cache em SourceAudio.
  */
+import fs from "node:fs"
 import { TextToSpeechClient } from "@google-cloud/text-to-speech"
 
 const DEFAULT_CHUNK_UTF8 = 4500
 const MAX_SSML_BYTES = 5000
+
+/** Voz estável (Neural2). Chirp3-HD pode retornar gRPC 13 INTERNAL em alguns projetos/regiões. */
+const DEFAULT_TTS_VOICE = "pt-BR-Neural2-A"
+const DEFAULT_TTS_VOICE_FALLBACK = "pt-BR-Wavenet-A"
+
+function isTransientTtsGrpcCode(code) {
+  return code === 4 || code === 13 || code === 14
+}
 
 function escapeXml(text) {
   return String(text)
@@ -87,20 +96,60 @@ function splitTextIntoUtf8Chunks(str, maxBytes) {
 
 let clientSingleton = null
 
+function assertServiceAccountShape(creds) {
+  if (!creds || typeof creds !== "object") return
+  if (!creds.client_email || !creds.private_key) {
+    throw new Error(
+      "Credenciais Google TTS: o JSON precisa ser de uma service account (client_email + private_key)."
+    )
+  }
+}
+
+/**
+ * Em Render/Fly/Heroku não existe ADC; é obrigatório JSON ou arquivo acessível.
+ * Preferir GOOGLE_TTS_CREDENTIALS_JSON (minificado) ou GOOGLE_TTS_CREDENTIALS_JSON_B64 no painel.
+ */
 export function getTtsClient() {
   if (clientSingleton) return clientSingleton
   const opts = {}
+  const jsonB64 = process.env.GOOGLE_TTS_CREDENTIALS_JSON_B64?.trim()
   const json = process.env.GOOGLE_TTS_CREDENTIALS_JSON?.trim()
   const keyFile = process.env.GOOGLE_APPLICATION_CREDENTIALS?.trim()
-  if (json) {
+
+  if (jsonB64) {
+    let decoded
+    try {
+      decoded = Buffer.from(jsonB64, "base64").toString("utf8")
+      opts.credentials = JSON.parse(decoded)
+    } catch {
+      throw new Error(
+        "GOOGLE_TTS_CREDENTIALS_JSON_B64 inválido (use base64 do JSON da service account)."
+      )
+    }
+    assertServiceAccountShape(opts.credentials)
+  } else if (json) {
     try {
       opts.credentials = JSON.parse(json)
     } catch {
       throw new Error("GOOGLE_TTS_CREDENTIALS_JSON não é JSON válido.")
     }
+    assertServiceAccountShape(opts.credentials)
   } else if (keyFile) {
+    if (!fs.existsSync(keyFile)) {
+      throw new Error(
+        `GOOGLE_APPLICATION_CREDENTIALS: arquivo não encontrado (${keyFile}). ` +
+          "No Render, defina GOOGLE_TTS_CREDENTIALS_JSON ou GOOGLE_TTS_CREDENTIALS_JSON_B64 com o JSON da service account (arquivo local não existe no deploy)."
+      )
+    }
     opts.keyFilename = keyFile
+  } else {
+    throw new Error(
+      "Google Cloud TTS sem credenciais: defina GOOGLE_TTS_CREDENTIALS_JSON, " +
+        "GOOGLE_TTS_CREDENTIALS_JSON_B64 ou GOOGLE_APPLICATION_CREDENTIALS. " +
+        "No GCP, ative a API Cloud Text-to-Speech e use uma chave JSON de service account."
+    )
   }
+
   clientSingleton = new TextToSpeechClient(opts)
   return clientSingleton
 }
@@ -137,12 +186,42 @@ async function synthesizePlain(client, textChunk, languageCode, voiceName) {
   return response.audioContent
 }
 
-export function getTtsVoiceConfig() {
-  return {
-    languageCode: process.env.GOOGLE_TTS_LANGUAGE_CODE?.trim() || "pt-BR",
-    voiceName:
-      process.env.GOOGLE_TTS_VOICE_NAME?.trim() || "pt-BR-Chirp3-HD-Algenib",
+/**
+ * Uma tentativa com voz primária; em erro transitório (ex. INTERNAL), repete com fallback.
+ */
+async function synthesizePlainWithVoiceFallback(
+  client,
+  textChunk,
+  languageCode,
+  primaryVoice,
+  fallbackVoice
+) {
+  try {
+    return await synthesizePlain(client, textChunk, languageCode, primaryVoice)
+  } catch (e) {
+    const canRetry =
+      fallbackVoice &&
+      fallbackVoice !== primaryVoice &&
+      isTransientTtsGrpcCode(e?.code)
+    if (!canRetry) throw e
+    console.warn(
+      "[Google TTS] voz primária falhou (gRPC",
+      e?.code,
+      "), tentando fallback:",
+      fallbackVoice
+    )
+    return await synthesizePlain(client, textChunk, languageCode, fallbackVoice)
   }
+}
+
+export function getTtsVoiceConfig() {
+  const languageCode = process.env.GOOGLE_TTS_LANGUAGE_CODE?.trim() || "pt-BR"
+  const voiceName =
+    process.env.GOOGLE_TTS_VOICE_NAME?.trim() || DEFAULT_TTS_VOICE
+  const fallbackName =
+    process.env.GOOGLE_TTS_VOICE_FALLBACK_NAME?.trim() ||
+    DEFAULT_TTS_VOICE_FALLBACK
+  return { languageCode, voiceName, fallbackName }
 }
 
 /**
@@ -153,26 +232,58 @@ export async function synthesizeTextToMp3Buffer(fullText) {
   const trimmed = String(fullText ?? "").trim()
   if (!trimmed) return Buffer.alloc(0)
 
-  const { languageCode, voiceName } = getTtsVoiceConfig()
+  const { languageCode, voiceName, fallbackName } = getTtsVoiceConfig()
   const client = getTtsClient()
   const chunkBytes = getChunkBytes()
   const plainUtf8Bytes = Buffer.byteLength(trimmed, "utf8")
+
+  async function trySsmlWithVoice(vName, ssml) {
+    const speakingRate = getSpeakingRate()
+    const [response] = await client.synthesizeSpeech({
+      input: { ssml },
+      voice: { languageCode, name: vName },
+      audioConfig: { audioEncoding: "MP3", speakingRate },
+    })
+    return Buffer.from(response.audioContent || [])
+  }
 
   if (plainUtf8Bytes <= 4200) {
     const oneShotSsml = buildSsmlInput(fitTextForSsml(trimmed))
     const ssmlBytes = Buffer.byteLength(oneShotSsml, "utf8")
     if (ssmlBytes <= MAX_SSML_BYTES - 32) {
       try {
-        const speakingRate = getSpeakingRate()
-        const [response] = await client.synthesizeSpeech({
-          input: { ssml: oneShotSsml },
-          voice: { languageCode, name: voiceName },
-          audioConfig: { audioEncoding: "MP3", speakingRate },
-        })
-        return Buffer.from(response.audioContent || [])
+        return await trySsmlWithVoice(voiceName, oneShotSsml)
       } catch (e) {
-        if (e?.code !== 3) throw e
-        console.warn("[Google TTS] SSML único rejeitado, usando texto em fatias.")
+        if (e?.code === 3) {
+          console.warn("[Google TTS] SSML único rejeitado, usando texto em fatias.")
+        } else if (
+          fallbackName !== voiceName &&
+          isTransientTtsGrpcCode(e?.code)
+        ) {
+          try {
+            return await trySsmlWithVoice(fallbackName, oneShotSsml)
+          } catch (e2) {
+            if (e2?.code === 3) {
+              console.warn(
+                "[Google TTS] SSML com voz fallback rejeitado, usando texto em fatias."
+              )
+            } else {
+              console.warn(
+                "[Google TTS] SSML falhou (gRPC",
+                e?.code,
+                "/",
+                e2?.code,
+                "), usando texto em fatias."
+              )
+            }
+          }
+        } else {
+          console.warn(
+            "[Google TTS] SSML falhou (gRPC",
+            e?.code,
+            "), usando texto em fatias."
+          )
+        }
       }
     }
   }
@@ -182,7 +293,13 @@ export async function synthesizeTextToMp3Buffer(fullText) {
   for (let i = 0; i < chunks.length; i++) {
     const part = chunks[i].trim()
     if (!part) continue
-    const audio = await synthesizePlain(client, part, languageCode, voiceName)
+    const audio = await synthesizePlainWithVoiceFallback(
+      client,
+      part,
+      languageCode,
+      voiceName,
+      fallbackName
+    )
     if (audio?.length) buffers.push(Buffer.from(audio))
   }
 

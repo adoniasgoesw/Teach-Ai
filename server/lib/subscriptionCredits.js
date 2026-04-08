@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client"
 import { prisma } from "./prisma.js"
+import { parsePositiveInt } from "./parseId.js"
 
 /** Próximo mês civil; evita “pular” dias em meses curtos. */
 export function addOneCalendarMonth(date) {
@@ -101,9 +102,13 @@ async function runSyncTransaction(userId) {
  * Garante carteira, assinatura Free legada (se faltar) e concessões mensais em atraso (+saldo).
  */
 export async function syncUserSubscriptionCredits(userId) {
+  const uid = parsePositiveInt(userId)
+  if (uid == null) {
+    throw new Error("syncUserSubscriptionCredits: userId inválido.")
+  }
   await prisma.creditWallet.upsert({
-    where: { userId },
-    create: { userId, balance: 0 },
+    where: { userId: uid },
+    create: { userId: uid, balance: 0 },
     update: {},
   })
 
@@ -111,7 +116,7 @@ export async function syncUserSubscriptionCredits(userId) {
   let lastErr
   for (let i = 0; i < attempts; i++) {
     try {
-      await runSyncTransaction(userId)
+      await runSyncTransaction(uid)
       return
     } catch (err) {
       lastErr = err

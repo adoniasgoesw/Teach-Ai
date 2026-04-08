@@ -1,7 +1,10 @@
 import { prisma } from "../lib/prisma.js"
+import { parsePositiveInt } from "../lib/parseId.js"
 import { syncUserSubscriptionCredits } from "../lib/subscriptionCredits.js"
 
 const DEFAULT_TX_TAKE = 80
+/** Linha única em BillingConfig (seed). */
+const BILLING_CONFIG_ROW_ID = 1
 
 /**
  * GET /api/credits/transactions?userId=&take=
@@ -9,10 +12,9 @@ const DEFAULT_TX_TAKE = 80
  */
 export async function getCreditTransactions(req, res) {
   try {
-    const userId =
-      req.query?.userId != null ? String(req.query.userId).trim() : ""
-    if (!userId) {
-      return res.status(400).json({ message: "userId é obrigatório." })
+    const userId = parsePositiveInt(req.query?.userId)
+    if (userId == null) {
+      return res.status(400).json({ message: "userId é obrigatório (número)." })
     }
 
     const takeRaw = Number(req.query?.take)
@@ -56,10 +58,9 @@ export async function getCreditTransactions(req, res) {
  */
 export async function getAccountSummary(req, res) {
   try {
-    const userId =
-      req.query?.userId != null ? String(req.query.userId).trim() : ""
-    if (!userId) {
-      return res.status(400).json({ message: "userId é obrigatório." })
+    const userId = parsePositiveInt(req.query?.userId)
+    if (userId == null) {
+      return res.status(400).json({ message: "userId é obrigatório (número)." })
     }
 
     // Aplica concessões mensais do plano Free/legado quando o ciclo vence.
@@ -105,7 +106,7 @@ export async function getAccountSummary(req, res) {
         },
       }),
       prisma.billingConfig.findUnique({
-        where: { id: "default" },
+        where: { id: BILLING_CONFIG_ROW_ID },
         select: { creditUnitCents: true },
       }),
     ])
@@ -181,10 +182,9 @@ export async function getAccountSummary(req, res) {
  */
 export async function getCreditsWallet(req, res) {
   try {
-    const userId =
-      req.query?.userId != null ? String(req.query.userId).trim() : ""
-    if (!userId) {
-      return res.status(400).json({ message: "userId é obrigatório." })
+    const userId = parsePositiveInt(req.query?.userId)
+    if (userId == null) {
+      return res.status(400).json({ message: "userId é obrigatório (número)." })
     }
 
     await prisma.creditWallet.upsert({

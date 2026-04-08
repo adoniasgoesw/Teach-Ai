@@ -133,7 +133,9 @@ export default function CourseContent({
         }
         if (ttsPersistSourceId) {
             return withText(
-                flatLessons.filter((l) => l.sourceId === ttsPersistSourceId)
+                flatLessons.filter(
+                    (l) => String(l.sourceId) === ttsPersistSourceId
+                )
             )
         }
         return withText(flatLessons)

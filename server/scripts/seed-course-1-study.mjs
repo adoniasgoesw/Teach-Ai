@@ -6,7 +6,7 @@
 import "dotenv/config"
 import { prisma } from "../lib/prisma.js"
 
-const COURSE_ID = "1"
+const COURSE_ID = 1
 
 async function main() {
     const course = await prisma.course.findUnique({

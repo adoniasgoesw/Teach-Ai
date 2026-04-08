@@ -8,6 +8,7 @@ import { PDFParse } from "pdf-parse"
 import { getGeminiClient } from "../lib/gemini.js"
 import { renderPdfPagesToPngBuffers } from "../lib/pdfPageImages.js"
 import { prisma } from "../lib/prisma.js"
+import { parsePositiveInt } from "../lib/parseId.js"
 import { assertCourseOwnedByUser } from "../lib/courseAccess.js"
 import {
   PDF_MAX_PAGES,
@@ -262,14 +263,13 @@ export async function processPdf(req, res) {
       })
     }
 
-    const courseId =
-      req.body?.courseId != null ? String(req.body.courseId).trim() : ""
-    if (!courseId) {
+    const courseId = parsePositiveInt(req.body?.courseId)
+    if (courseId == null) {
       await safeUnlink(filePath)
       return res.status(400).json({
         ok: false,
         saved: false,
-        message: "courseId é obrigatório.",
+        message: "courseId é obrigatório (número).",
       })
     }
 
@@ -283,9 +283,8 @@ export async function processPdf(req, res) {
       })
     }
 
-    const userId =
-      req.body?.userId != null ? String(req.body.userId).trim() : ""
-    if (!userId) {
+    const userId = parsePositiveInt(req.body?.userId)
+    if (userId == null) {
       await safeUnlink(filePath)
       return res.status(400).json({
         ok: false,

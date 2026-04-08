@@ -1,5 +1,6 @@
 import crypto from "crypto"
 import { prisma } from "../lib/prisma.js"
+import { parsePositiveInt } from "../lib/parseId.js"
 import { assertSourceOwnedByUser, readUserIdFromBody } from "../lib/courseAccess.js"
 import {
   TTS_MAX_TEXT_CHARS,
@@ -26,9 +27,8 @@ function hashText(text) {
  */
 export async function getSourceAudio(req, res) {
   try {
-    const sourceId =
-      req.params.sourceId != null ? String(req.params.sourceId).trim() : ""
-    if (!sourceId) {
+    const sourceId = parsePositiveInt(req.params.sourceId)
+    if (sourceId == null) {
       return res.status(400).json({ message: "sourceId inválido." })
     }
 
@@ -65,11 +65,10 @@ export async function getSourceAudio(req, res) {
  */
 export async function postSourceAudio(req, res) {
   try {
-    const sourceId =
-      req.params.sourceId != null ? String(req.params.sourceId).trim() : ""
+    const sourceId = parsePositiveInt(req.params.sourceId)
     const text = req.body?.text
 
-    if (!sourceId) {
+    if (sourceId == null) {
       return res.status(400).json({ message: "sourceId inválido." })
     }
     if (typeof text !== "string" || !text.trim()) {
@@ -82,7 +81,7 @@ export async function postSourceAudio(req, res) {
     }
 
     const userId = readUserIdFromBody(req)
-    if (!userId) {
+    if (userId == null) {
       return res.status(400).json({ message: "userId é obrigatório para usar créditos." })
     }
 
@@ -193,7 +192,9 @@ export async function postSourceAudio(req, res) {
     const hint =
       code === 7 || code === 16
         ? " Verifique credenciais Google TTS e API ativa."
-        : ""
+        : code === 13
+          ? " Erro interno do Google TTS: use voz Neural2/Wavenet (veja GOOGLE_TTS_VOICE_NAME no servidor)."
+          : ""
     if (code === "P2028") {
       return res.status(503).json({
         message:

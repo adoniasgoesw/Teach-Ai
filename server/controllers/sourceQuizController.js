@@ -1,4 +1,5 @@
 import { assertSourceOwnedByUser, readUserIdFromBody } from "../lib/courseAccess.js"
+import { parsePositiveInt } from "../lib/parseId.js"
 import { CREDIT_AI_QUIZ } from "../lib/creditPricing.js"
 import {
   consumeCreditsTx,
@@ -64,8 +65,8 @@ function validateQuizzes(items) {
 }
 
 async function ensureSource(sourceId) {
-  const id = sourceId != null ? String(sourceId).trim() : ""
-  if (!id) return { error: "sourceId inválido." }
+  const id = parsePositiveInt(sourceId)
+  if (id == null) return { error: "sourceId inválido." }
   const source = await prisma.source.findUnique({
     where: { id },
     select: { id: true, text: true, filename: true },
@@ -78,7 +79,7 @@ async function ensureSource(sourceId) {
 
 export async function getSourceQuizzes(req, res) {
   try {
-    const sourceId = req.params.sourceId != null ? String(req.params.sourceId).trim() : ""
+    const sourceId = parsePositiveInt(req.params.sourceId)
     const check = await ensureSource(sourceId)
     if (check.error) {
       const code = check.error.includes("não encontrad") ? 404 : 400
@@ -119,7 +120,7 @@ export async function getSourceQuizzes(req, res) {
 
 export async function postGenerateSourceQuizzes(req, res) {
   try {
-    const sourceId = req.params.sourceId != null ? String(req.params.sourceId).trim() : ""
+    const sourceId = parsePositiveInt(req.params.sourceId)
     const check = await ensureSource(sourceId)
     if (check.error) {
       const code = check.error.includes("não encontrad") ? 404 : 400
@@ -127,7 +128,7 @@ export async function postGenerateSourceQuizzes(req, res) {
     }
 
     const userId = readUserIdFromBody(req)
-    if (!userId) {
+    if (userId == null) {
       return res.status(400).json({ message: "userId é obrigatório." })
     }
     const own = await assertSourceOwnedByUser(sourceId, userId)

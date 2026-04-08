@@ -1,6 +1,12 @@
 import bcrypt from "bcrypt"
 import { prisma } from "../lib/prisma.js"
 
+function normalizeEmail(raw) {
+  return String(raw ?? "")
+    .trim()
+    .toLowerCase()
+}
+
 function isValidPassword(password) {
   // mínimo 8 caracteres, com minúscula, maiúscula, número e símbolo
   const regex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^\w\s]).{8,}$/
@@ -9,7 +15,8 @@ function isValidPassword(password) {
 
 export async function register(req, res) {
   try {
-    const { name, email, password } = req.body
+    const { name, password } = req.body
+    const email = normalizeEmail(req.body?.email)
 
     if (!name || !email || !password) {
       return res.status(400).json({ message: "Nome, email e senha são obrigatórios." })
@@ -33,21 +40,11 @@ export async function register(req, res) {
 
     const hashedPassword = await bcrypt.hash(password, 10)
 
-    // Busca o maior id numérico atual e soma +1. Se não existir, começa em 1.
-    const rows =
-      (await prisma.$queryRaw`SELECT COALESCE(MAX(CAST(id AS INTEGER)), 0) AS "max" FROM "User" WHERE id ~ '^[0-9]+$'`) ??
-      []
-    const currentMax = Number(rows[0]?.max ?? 0)
-    const nextId = String(currentMax + 1)
-
     const user = await prisma.user.create({
       data: {
-        id: nextId,
         name,
         email,
         password: hashedPassword,
-        createdAt: new Date(),
-        updatedAt: new Date(),
         creditWallet: {
           create: { balance: 20 },
         },
@@ -73,9 +70,10 @@ export async function register(req, res) {
 
 export async function login(req, res) {
   try {
-    const { email, password } = req.body
+    const email = normalizeEmail(req.body?.email)
+    const password = req.body?.password
 
-    if (!email || !password) {
+    if (!email || typeof password !== "string" || !password) {
       return res.status(400).json({ message: "Email e senha são obrigatórios." })
     }
 
